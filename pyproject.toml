@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meltinv"
+version = "0.1.0"
+description = "Joint inversion of melt pressure, lithospheric thickness and source enrichment from REE data."
+authors = [{ name = "Shihao Jiang" }]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "numpy",
+  "scipy",
+  "pandas",
+  "openpyxl",
+  "matplotlib==3.9.1",
+  "meltPT"
+]
+license = "MIT"
+
+[project.scripts]
+meltinv = "meltinv.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["meltinv*"]
