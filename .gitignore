@@ -21,7 +21,7 @@ inversion_results/
 inversion_figures/
 
 # Test code
-*.py
+/*.py
 
 # macOS
 .DS_Store
