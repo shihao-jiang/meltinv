@@ -24,3 +24,6 @@ meltinv = "meltinv.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["meltinv*"]
+
+[tool.setuptools.package-data]
+"meltinv" = ["data/*.npy"]
