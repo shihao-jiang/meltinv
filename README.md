@@ -28,8 +28,8 @@ using Rare Earth Element (REE) compositions and Al<sub>2</sub>O<sub>3</sub> conc
 Clone the repository:
 
 ```
-git clone https://github.com/?/meltInv.git
-cd meltInv
+git clone https://github.com/?/meltinv.git
+cd meltinv
 pip install .
 ```
 If you would like to develop this package, please replace the last line with the following command:
