@@ -8,6 +8,7 @@ build/
 dist/
 
 # Virtual environments
+venv311/
 venv/
 .venv/
 
