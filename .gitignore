@@ -24,5 +24,8 @@ inversion_figures/
 # Test code
 /*.py
 
+# Figure
+comparison*png
+
 # macOS
 .DS_Store
