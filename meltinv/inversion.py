@@ -156,7 +156,7 @@ def save_results(file_name, inv_result_df):
     results_dir.mkdir(exist_ok=True)
 
     base_name = Path(file_name).stem
-    output_file = results_dir / f"{base_name}_inversion_summary.xlsx"
+    output_file = results_dir / f"{base_name}_inversion_summary_slice.xlsx"
 
     inv_result_df.insert(0, 'location', inv_result_df.pop('location'))
 
@@ -293,6 +293,8 @@ def invert_single_group(df, location, count, grids, test_enrichment_values):
         "threshold": None,
     }
 
+    full_3d_grids = []
+
     for scale_val in test_enrichment_values:
 
         total_misfit_grid, threshold, min_idx, x_min_Al_idx, x_max_Al_idx, dict_mix = compute_total_ree_misfit(
@@ -301,6 +303,8 @@ def invert_single_group(df, location, count, grids, test_enrichment_values):
             scale_val=scale_val,
             grids=grids
         )
+
+        full_3d_grids.append(total_misfit_grid)
 
         if min_idx is not None:
             global_min_value = total_misfit_grid[min_idx]
@@ -335,6 +339,7 @@ def invert_single_group(df, location, count, grids, test_enrichment_values):
         high_ree[i] = factor * high_ree[i]
 
     return {
+        "full_3d_grids": np.array(full_3d_grids),
         "min_idx": best_result["min_idx"],
         "T_mean": 65 + t_idx * 5,
         "depth_mean": 15 + p_idx * 2 + 1,
@@ -343,6 +348,9 @@ def invert_single_group(df, location, count, grids, test_enrichment_values):
         "pres_max": average_pres_max_grid[p_idx, t_idx],
         "basalt_percentage": best_result["scale"],
         "misfit_value": best_result["min_misfit_value"],
+        "global_min_value": np.nanmin(full_3d_grids),
+        "global_flat_index": np.nanargmin(full_3d_grids),
+        "ratio_of_local_global_misfit": best_result["min_misfit_value"] / np.nanmin(full_3d_grids),
         "misfit_grid": best_result["misfit_grid"],
         "threshold": best_result["threshold"],
         "mean_ree": mean_ree,
@@ -359,14 +367,23 @@ def remove_keys(d, keys):
     return {k: v for k, v in new_d.items() if k not in keys}
 
 def plot_results(df, location, count, result):
-    fig, axs = plt.subplots(1, 2, figsize=(9, 3.8), layout='constrained')
+    fig, axs = plt.subplots(2, 2, figsize=(9, 7.5), layout='constrained')
+
+
     # Plot on left panel
-    ax = axs[0]
+    ax = axs[0, 0]
 
     if result["min_idx"] is None:
         return
     else:
         p_idx, t_idx = result["min_idx"]
+        min_value = result["misfit_value"]
+        full_3d_grid = result["full_3d_grids"]
+        global_min_value = result["global_min_value"]
+        global_flat_index = result["global_flat_index"]
+        e_i, p_i, t_i = np.unravel_index(global_flat_index, full_3d_grid.shape)
+        basalt_idx = result["basalt_percentage"] if result["basalt_percentage"]>=0 else int(result["basalt_percentage"]/10)
+
 
     ree_variables = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
                      'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu']
@@ -382,9 +399,9 @@ def plot_results(df, location, count, result):
     plot_ree_range(ax, result["mean_ree"], result["low_ree"], result["high_ree"])
 
     # Plot on left panel
-    ax = axs[1]
-    best_misfit_grid = result["misfit_grid"]
-    best_threshold = result["threshold"]
+    ax = axs[0, 1]
+    best_misfit_grid = result["misfit_grid"] / min_value
+
     litho_thickness_ref = result["litho_thickness_ref"]
     basalt_percentage = result["basalt_percentage"]
     x_min_Al_idx, x_max_Al_idx = result["Al_depth_range"]
@@ -395,7 +412,8 @@ def plot_results(df, location, count, result):
     cmap.set_bad(color='white')
     # Plot masked grid
     im = ax.imshow(masked_grid, cmap=cmap)
-    fig.colorbar(im, ax=ax, label='Misfit')
+    cbar = fig.colorbar(im, ax=ax, label='misfit / minimum misfit')
+    cbar.ax.yaxis.set_major_formatter('{:.1f}'.format)
 
     # Set limits to match data
     nx = 58
@@ -415,10 +433,13 @@ def plot_results(df, location, count, result):
     ax.set_ylabel('Lithospheric thickness (km)')
 
     # Find min positive L2 norm value and its location
+    ax.plot(t_i, p_i, marker='o', color='orange', markersize=10)
     ax.plot(t_idx, p_idx, marker='*', color='red', markersize=10)
 
     # Contour for lowest 3% (excluding 0 and NaN)
-    ax.contour(best_misfit_grid, levels=[best_threshold], colors='white', linewidths=1.5)
+    levels = [1.1, 1.3, 1.5, 2, 2.5, 3, 5]
+    cs = ax.contour(best_misfit_grid, levels=levels, colors='white', linewidths=1.2)
+    ax.clabel(cs, inline=True, fontsize=8, fmt='%1.1f')
     if litho_thickness_ref is not None:
         ax.axhline((litho_thickness_ref - 15) / 2, color='black', linestyle='--')
 
@@ -426,6 +447,62 @@ def plot_results(df, location, count, result):
                     linestyle='-')
     ax.fill_between([0, 100], x_max_Al_idx, 100, color='white', edgecolor='black', linewidths=1.3, alpha=0.5,
                     linestyle='-')
+
+    ratio_of_local_global_misfit = result["ratio_of_local_global_misfit"]
+
+    ax.text(0.02, 0.95, f"Ratio to Global Min Misfit = {ratio_of_local_global_misfit:.1f}", transform=ax.transAxes)
+
+    ax = axs[1, 0]
+    best_misfit_grid = full_3d_grid[:, p_idx, :] / min_value
+    masked_grid = np.ma.masked_where((best_misfit_grid <= 0) | np.isnan(best_misfit_grid), best_misfit_grid)
+
+    im = ax.imshow(masked_grid, cmap=cmap, aspect='auto')
+    ax.set_xlim(0, nx)
+    x_ticks = np.arange(0, nx, 10)
+    x_labels = 65 + 5 * x_ticks
+    ax.set_xticks(ticks=x_ticks, labels=x_labels)
+    ax.set_xlabel('Excess Temperature (K)')
+
+    if best_misfit_grid.shape[0] > 16:
+        y_ticks = np.arange(0, 26, 5)
+        y_labels = [i*5 - 10 for i in range(6)]
+        ax.set_yticks(ticks=y_ticks, labels=y_labels)
+        ax.plot(t_i, e_i + 10, marker='o', color='orange', markersize=10)
+        ax.plot(t_idx, basalt_idx + 10, marker='*', color='red', markersize=10)
+    else:
+        ax.plot(t_i, e_i, marker='o', color='orange', markersize=10)
+        ax.plot(t_idx, basalt_idx, marker='*', color='red', markersize=10)
+
+    ax.set_ylabel('Relative Enrichment')
+
+    cs = ax.contour(best_misfit_grid, levels=levels, colors='white', linewidths=1.2)
+    ax.clabel(cs, inline=True, fontsize=8, fmt='%1.1f')
+
+    ax = axs[1, 1]
+    best_misfit_grid = full_3d_grid[:, :, t_idx] / min_value
+    masked_grid = np.ma.masked_where((best_misfit_grid <= 0) | np.isnan(best_misfit_grid), best_misfit_grid)
+    im = ax.imshow(masked_grid, cmap=cmap, aspect='auto')
+    ax.set_xlim(0, ny)
+
+    x_ticks = np.arange(0, ny, 10)
+    x_labels = 15 + 2 * y_ticks
+    ax.set_xticks(ticks=x_ticks, labels=x_labels)
+    ax.set_xlabel('Lithospheric thickness (km)')
+
+    if best_misfit_grid.shape[0] > 16:
+        y_ticks = np.arange(0, 26, 5)
+        y_labels = [i*5 - 10 for i in range(6)]
+        ax.set_yticks(ticks=y_ticks, labels=y_labels)
+        ax.plot(p_i, e_i + 10, marker='o', color='orange', markersize=10)
+        ax.plot(p_idx, basalt_idx + 10, marker='*', color='red', markersize=10)
+    else:
+        ax.plot(p_i, e_i, marker='o', color='orange', markersize=10)
+        ax.plot(p_idx, basalt_idx, marker='*', color='red', markersize=10)
+
+    ax.set_ylabel('Relative Enrichment')
+
+    cs = ax.contour(best_misfit_grid, levels=levels, colors='white', linewidths=1.2)
+    ax.clabel(cs, inline=True, fontsize=8, fmt='%1.1f')
 
     if basalt_percentage >= 0:
         fig.suptitle(f"{location}, Basalt Percentage = {basalt_percentage: .0f} %", fontsize=13.6,
@@ -464,12 +541,13 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
             result["location"] = location
             result["count"] = count
 
-            keys_to_be_removed = ["misfit_grid", "threshold", "Al_depth_range", "scaling_factors",
-                                  "mean_ree", "low_ree", "high_ree", "min_idx"]
+            keys_to_be_removed = ["full_3d_grids", "misfit_grid", "threshold", "Al_depth_range", "scaling_factors",
+                                  "mean_ree", "low_ree", "high_ree", "min_idx", "global_flat_index"]
             results.append(remove_keys(result, keys_to_be_removed))
 
             if make_figures == True:
                 plot_results(df, location, count, result)
+
 
     summary_df = pd.DataFrame(results)
     save_results(file_name, summary_df)
