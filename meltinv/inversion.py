@@ -156,7 +156,7 @@ def save_results(file_name, inv_result_df):
     results_dir.mkdir(exist_ok=True)
 
     base_name = Path(file_name).stem
-    output_file = results_dir / f"{base_name}_inversion_summary_slice.xlsx"
+    output_file = results_dir / f"{base_name}_inversion_summary_log10.xlsx"
 
     inv_result_df.insert(0, 'location', inv_result_df.pop('location'))
 
@@ -168,6 +168,11 @@ def compute_total_ree_misfit(df, mask, scale_val, grids):
     """
     Compute total normalized misfit grid for one enrichment scale value.
     """
+    PM_1995_list = [
+        0.648, 1.675, 0.254, 1.250, 0.406, 0.154,
+        0.544, 0.099, 0.674, 0.149, 0.438, 0.068,
+        0.441, 0.0675]
+
     ree_variables = grids["ree_variables"]
     simulation = grids["simulation"]
 
@@ -192,13 +197,13 @@ def compute_total_ree_misfit(df, mask, scale_val, grids):
         for c_l in c_sample:
             if c_l > 0:
                 misfit_grid[valid_mask] += (
-                    simulation_scaled[i][valid_mask] - c_l
+                    np.log10(simulation_scaled[i][valid_mask] / PM_1995_list[i]) - np.log10(c_l / PM_1995_list[i])
                 ) ** 2
 
         std = np.nanstd(c_sample)
 
         misfit_grid[valid_mask] = (
-            np.sqrt(misfit_grid[valid_mask]) / std / sample_count
+            np.sqrt(misfit_grid[valid_mask]) / sample_count
         )
 
         misfit_grid = np.where(valid_mask, misfit_grid, np.nan)
@@ -514,7 +519,7 @@ def plot_results(df, location, count, result):
     results_dir = Path("inversion_figures")
     results_dir.mkdir(exist_ok=True)
 
-    output_file = results_dir / f"ree_comparison_{location}_N{count}.png"
+    output_file = results_dir / f"ree_comparison_{location}_log10_N{count}.png"
 
     plt.savefig(output_file, dpi=300, bbox_inches='tight')
     print(f"Figure saved to: {output_file.resolve()}")
