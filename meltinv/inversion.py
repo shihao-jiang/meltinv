@@ -197,7 +197,7 @@ def compute_total_ree_misfit(df, mask, scale_val, grids):
         for c_l in c_sample:
             if c_l > 0:
                 misfit_grid[valid_mask] += (
-                    np.log10(simulation_scaled[i][valid_mask] / PM_1995_list[i]) - np.log10(c_l / PM_1995_list[i])
+                    np.log10(simulation_scaled[i][valid_mask]) - np.log10(c_l)
                 ) ** 2
 
         std = np.nanstd(c_sample)
@@ -337,11 +337,26 @@ def invert_single_group(df, location, count, grids, test_enrichment_values):
     low_ree = [arr[p_idx, t_idx] for arr in lower_bound_concentrations]
     high_ree = [arr[p_idx, t_idx] for arr in upper_bound_concentrations]
 
+    global_flat_index = np.nanargmin(full_3d_grids)
+    e_gl, p_gl, t_gl = np.unravel_index(global_flat_index, np.array(full_3d_grids).shape)
+    mean_ree_global = [arr[p_gl, t_gl] for arr in simulation_concentrations]
+    if len(test_enrichment_values) > 16:
+        if e_gl <= 10:
+            dict_mix_global = source_composition_mix((e_gl - 10) * 10)
+        else:
+            dict_mix_global = source_composition_mix(e_gl - 10)
+    else:
+        dict_mix_global = source_composition_mix(e_gl)
+
     for i, ree in enumerate(ree_variables):
         factor = best_result["scaling_factors"][ree]
         mean_ree[i] = factor * mean_ree[i]
         low_ree[i] = factor * low_ree[i]
         high_ree[i] = factor * high_ree[i]
+
+    for i, ree in enumerate(ree_variables):
+        factor = dict_mix_global[ree]
+        mean_ree_global[i] = factor * mean_ree_global[i]
 
     return {
         "full_3d_grids": np.array(full_3d_grids),
@@ -354,7 +369,8 @@ def invert_single_group(df, location, count, grids, test_enrichment_values):
         "basalt_percentage": best_result["scale"],
         "misfit_value": best_result["min_misfit_value"],
         "global_min_value": np.nanmin(full_3d_grids),
-        "global_flat_index": np.nanargmin(full_3d_grids),
+        "global_flat_index": global_flat_index,
+        "mean_ree_global": mean_ree_global,
         "ratio_of_local_global_misfit": best_result["min_misfit_value"] / np.nanmin(full_3d_grids),
         "misfit_grid": best_result["misfit_grid"],
         "threshold": best_result["threshold"],
@@ -372,8 +388,7 @@ def remove_keys(d, keys):
     return {k: v for k, v in new_d.items() if k not in keys}
 
 def plot_results(df, location, count, result):
-    fig, axs = plt.subplots(2, 2, figsize=(9, 7.5), layout='constrained')
-
+    fig, axs = plt.subplots(2, 2, figsize=(9, 7.35), layout='constrained')
 
     # Plot on left panel
     ax = axs[0, 0]
@@ -389,19 +404,32 @@ def plot_results(df, location, count, result):
         e_i, p_i, t_i = np.unravel_index(global_flat_index, full_3d_grid.shape)
         basalt_idx = result["basalt_percentage"] if result["basalt_percentage"]>=0 else int(result["basalt_percentage"]/10)
 
-
     ree_variables = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
                      'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu']
 
     mask = df["location"] == location
     sample_values = df[ree_variables][mask].to_numpy()
 
+    flag = 0
     for i in sample_values:
-        plot_ree(ax, i, 'k', 2, label=None)
+        if flag == 0:
+            plot_ree(ax, i, 'k', 2, label='Sample')
+            flag = 1
+        else:
+            plot_ree(ax, i, 'k', 2, label=None)
 
-    plot_ree(ax, result["mean_ree"], 'red', 2, label=None)
-
+    plot_ree(ax, result["mean_ree_global"], 'orange', 2, label='Global Best Fit')
+    plot_ree(ax, result["mean_ree"], 'red', 2, label='Best Fit')
     plot_ree_range(ax, result["mean_ree"], result["low_ree"], result["high_ree"])
+
+    ax.legend(loc='lower left')
+
+    inv_temp = int(65 + 5 * t_idx)
+    inv_thickness = int(15 + 2 + p_idx)
+    inv_basalt = int(basalt_idx)
+    ax.text(0.99, 0.987, f"{location}", ha='right', va='top', fontweight='bold', transform=ax.transAxes)
+    ax.text(0.99, 0.93, f'Temperature = {inv_temp} K\nThickness = {inv_thickness} km'
+                        f'\nEnrichment Factor = {inv_basalt}', transform=ax.transAxes, ha='right', va='top', multialignment='right')
 
     # Plot on left panel
     ax = axs[0, 1]
@@ -504,17 +532,15 @@ def plot_results(df, location, count, result):
         ax.plot(p_i, e_i, marker='o', color='orange', markersize=10)
         ax.plot(p_idx, basalt_idx, marker='*', color='red', markersize=10)
 
+    if litho_thickness_ref is not None:
+        ax.axvline((litho_thickness_ref - 15) / 2, color='black', linestyle='--')
+
     ax.set_ylabel('Relative Enrichment')
 
     cs = ax.contour(best_misfit_grid, levels=levels, colors='white', linewidths=1.2)
     ax.clabel(cs, inline=True, fontsize=8, fmt='%1.1f')
 
-    if basalt_percentage >= 0:
-        fig.suptitle(f"{location}, Basalt Percentage = {basalt_percentage: .0f} %", fontsize=13.6,
-                     fontweight='bold')
-    else:
-        fig.suptitle(f"{location}, Depleted Percentage = {basalt_percentage: .0f} %", fontsize=13.6,
-                     fontweight='bold')
+
 
     results_dir = Path("inversion_figures")
     results_dir.mkdir(exist_ok=True)
@@ -547,7 +573,7 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
             result["count"] = count
 
             keys_to_be_removed = ["full_3d_grids", "misfit_grid", "threshold", "Al_depth_range", "scaling_factors",
-                                  "mean_ree", "low_ree", "high_ree", "min_idx", "global_flat_index"]
+                                  "mean_ree", "mean_ree_global", "low_ree", "high_ree", "min_idx", "global_flat_index"]
             results.append(remove_keys(result, keys_to_be_removed))
 
             if make_figures == True:
