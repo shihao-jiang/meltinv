@@ -110,7 +110,6 @@ def obtain_thickness_major(c_Al2O3):
     b_Al2O3 = 15.29
     std = 1.43
     mean_Al2O3 = np.mean(c_Al2O3)
-
     x_mean = (mean_Al2O3 - b_Al2O3) / k_Al2O3
     x_min = (mean_Al2O3 - b_Al2O3 + std) / k_Al2O3
     x_max = (mean_Al2O3 - b_Al2O3 - std) / k_Al2O3
@@ -551,6 +550,12 @@ def plot_results(df, location, count, result):
     print(f"Figure saved to: {output_file.resolve()}")
     plt.close(fig)
 
+def calibration(T, P, b):
+    T = np.array(T)
+    P = np.array(P)
+    b_prime = np.array([i if i >= 0 else 0 for i in list(b)])
+
+    return T - 70 * 0.027 * P * b_prime / 100 - 0.8 * b_prime / 100 * (T + 100)
 
 def invert_melt_condition(file_name, depleted_location=None, correction=False,
                           src_Fo=0.9, max_olivine_addition=0.4, make_figures=False):
@@ -562,7 +567,6 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
     group_list = build_group_list(df)
     grids = load_all_grids()
     results = []
-
     for g_i, group in enumerate(group_list):
         location, count = group
         test_enrichment_values = get_enrichment_values(location, depleted_location)
@@ -579,6 +583,13 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
             if make_figures == True:
                 plot_results(df, location, count, result)
 
+    results = pd.DataFrame(results)
+
+    T_mean = results['T_mean']
+    P_mean = results['pres_mean']
+    basalt_perc = results['basalt_percentage']
+
+    results.insert(results.columns.get_loc('T_mean') + 1, 'T_mean_cali', calibration(T_mean, P_mean, basalt_perc))
 
     summary_df = pd.DataFrame(results)
     save_results(file_name, summary_df)
