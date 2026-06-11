@@ -114,6 +114,7 @@ def obtain_thickness_major(c_Al2O3):
     x_min = (mean_Al2O3 - b_Al2O3 + std) / k_Al2O3
     x_max = (mean_Al2O3 - b_Al2O3 - std) / k_Al2O3
 
+    # return 0, 150
     return x_min, x_max
 
 def load_all_grids():
@@ -539,8 +540,6 @@ def plot_results(df, location, count, result):
     cs = ax.contour(best_misfit_grid, levels=levels, colors='white', linewidths=1.2)
     ax.clabel(cs, inline=True, fontsize=8, fmt='%1.1f')
 
-
-
     results_dir = Path("inversion_figures")
     results_dir.mkdir(exist_ok=True)
 
@@ -552,10 +551,10 @@ def plot_results(df, location, count, result):
 
 def calibration(T, P, b):
     T = np.array(T)
-    P = np.array(P)
-    b_prime = np.array([i if i >= 0 else 0 for i in list(b)])
+    P = np.array(P) / 33
+    b = np.array([i if i >= 0 else 0 for i in list(b)])
 
-    return T - 70 * 0.027 * P * b_prime / 100 - 0.8 * b_prime / 100 * (T + 100)
+    return T - (-3.533 + 1.827*P + 0.380*b + 0.656*P*b)
 
 def invert_melt_condition(file_name, depleted_location=None, correction=False,
                           src_Fo=0.9, max_olivine_addition=0.4, make_figures=False):
