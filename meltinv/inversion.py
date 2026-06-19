@@ -554,7 +554,8 @@ def calibration(T, P, b):
     P = np.array(P) / 33
     b = np.array([i if i >= 0 else 0 for i in list(b)])
 
-    return T - (-3.533 + 1.827*P + 0.380*b + 0.656*P*b)
+    # return T
+    return T - (181.3 + 21.4 * P - 6.8 * P**2) * b / 100
 
 def invert_melt_condition(file_name, depleted_location=None, correction=False,
                           src_Fo=0.9, max_olivine_addition=0.4, make_figures=False):
