@@ -31,6 +31,8 @@ The package can be used from the **command line** or from **Python**. This READM
    - [Step 5: Reading the figures](#step-5-reading-the-figures)
 4. [Going further](#4-going-further)
    - [Using the results in Python](#using-the-results-in-python)
+   - [Save a run and regenerate figures](#calculate-once-and-regenerate-figures-later)
+   - [Reading the source code](docs/code-guide.md)
    - [Group inversion: the group_samples branch](#group-inversion-the-group_samples-branch)
 5. [How the inversion works](#5-how-the-inversion-works)
 6. [Troubleshooting](#6-troubleshooting)
@@ -78,6 +80,7 @@ meltinv.invert(
     max_olivine_addition=0.5,         # maximum olivine added during correction
     individual_sample_figures=False,  # 4-panel REE/misfit figure for each sample
     group_comparison_figure=True,     # comparison figure for each location
+    plot_archive=None,               # optional .zip snapshot for plotting later
 )
 
 meltinv.correction(file_name, src_Fo=0.9, max_olivine_addition=0.5)
@@ -94,6 +97,7 @@ meltinv.correction(file_name, src_Fo=0.9, max_olivine_addition=0.5)
 | `max_olivine_addition` | `--max_olivine_addition` | `0.5` | Maximum mass fraction of olivine that may be added. Used only by the correction. |
 | `individual_sample_figures` | `--individual_sample_figures` | `False` | Save a 4-panel REE and misfit figure for each sample (see [Step 5](#step-5-reading-the-figures)). |
 | `group_comparison_figure` | `--no_group_comparison_figure` turns it off | `True` | Save a figure comparing the samples at each location with ≥ 3 samples (see [Step 5](#step-5-reading-the-figures)). |
+| `plot_archive` | `--plot_archive PATH.zip` | `None` | Save a plotting snapshot; does not itself draw figures. See [plotting later](#calculate-once-and-regenerate-figures-later). |
 
 `meltinv.invert` returns the per-sample results as a pandas DataFrame, and `meltinv.correction` returns the corrected data. On the command line, the two functions are `meltinv invert FILE [flags]` and `meltinv correction FILE [flags]`.
 
@@ -107,6 +111,9 @@ meltinv correction FILE [--src_Fo 0.9] [--max_olivine_addition 0.5]
 meltinv invert FILE [--depleted LOC [LOC ...] | --depleted all]
                     [--correction] [--src_Fo 0.9] [--max_olivine_addition 0.5]
                     [--individual_sample_figures] [--no_group_comparison_figure]
+                    [--plot_archive PATH.zip]
+
+meltinv plot PATH.zip [--output_dir DIR] [--no_individual] [--no_groups]
 ```
 
 For example, to treat the Iceland and Galápagos locations as possibly depleted, correct the samples first and save the individual figures:
@@ -127,7 +134,8 @@ All paths are relative to the current working directory. `{name}` is the input f
 | `inversion_figures/group_comparison_{location}_N{count}.png` | `invert` (unless `--no_group_comparison_figure`) |
 | `inversion_figures/ree_comparison_{location}__sample{n}_log10_N1.png` | `invert --individual_sample_figures` |
 
-Existing files with the same name are overwritten.
+Existing files with the same name are overwritten. A requested `.zip` plotting
+archive is separate from these tables and is replaced only after a successful run.
 
 ---
 
@@ -245,8 +253,8 @@ The inversion writes two results files.
 
 This file has one row per location, made by combining the per-sample results:
 
-1. Every column is averaged over all inverted samples at that location, with weights of `1 / misfit_value`, so better-fitting samples count for more.
-2. `T_mean_cali`, `depth_mean_cali` and `basalt_percentage` also get `_err_minus` and `_err_plus` columns (weighted mean ± weighted standard deviation). For `basalt_percentage`, these error bounds use a compressed scale in which negative (depleted) values are divided by 100.
+1. Every column is averaged over all inverted samples at that location, with weights of `1 / (misfit_value + 1e-6)`, so better-fitting samples count for more.
+2. `T_mean_cali`, `depth_mean_cali` and `basalt_percentage` also get `_err_minus` and `_err_plus` columns (weighted mean ± weighted standard deviation). For `basalt_percentage`, the mean and both bounds are in the same percentage units. Only the figures compress negative (depleted) values by dividing them by 100.
 
 For the example, the main columns look like this:
 
@@ -295,7 +303,7 @@ One figure per location is saved as `inversion_figures/group_comparison_{locatio
 | **(a)** | Excess temperature vs lithospheric thickness, one point per sample |
 | **(b)** | Relative enrichment vs lithospheric thickness |
 | **(c)** | Excess temperature vs relative enrichment |
-| **(d-1) to (d-3)** | Histograms of temperature, thickness and enrichment. The dashed line is the misfit-weighted mean and the grey band is ± 1 weighted standard deviation, computed the same way as the location summary in Step 4. |
+| **(d-1) to (d-3)** | Histograms of temperature, thickness and enrichment. The dashed line is the misfit-weighted mean and the grey band is ± 1 weighted standard deviation, computed using the same weighting rule as the location summary in Step 4. Enrichment histograms apply the display transformation before computing their statistics, so these need not equal a transformation of the exported mean and bounds. |
 
 In panels (a) to (c), points are coloured by misfit; darker blue is a better fit. Depleted enrichment values (negative) are divided by 100 so they fit on the same axis. Locations with fewer than 3 samples are skipped, with a message.
 
@@ -315,12 +323,12 @@ Each individual figure has four panels:
 
 | Panel | What it shows |
 |---|---|
-| **Top left** | Chondrite-normalised REE pattern: the sample (black), the best-fit model (red) with its uncertainty envelope (shading), and the global best fit (orange). The inverted temperature, thickness and enrichment are printed in the corner. |
+| **Top left** | Chondrite-normalised REE pattern: the sample (black), the best-fit model (red) with its forward-model min/max envelope (shading), and the global best fit (orange). The inverted temperature, thickness and enrichment are printed in the corner. |
 | **Top right** | Misfit across excess temperature and lithospheric thickness, at the best-fit enrichment. Colours and contours show misfit divided by the minimum misfit, so 1.1 means 10% worse than the best fit. The red star marks the best fit, the orange circle the global minimum, and the dashed line `litho_thickness_ref`. |
 | **Bottom left** | Misfit across excess temperature and enrichment, at the best-fit thickness |
 | **Bottom right** | Misfit across thickness and enrichment, at the best-fit temperature |
 
-The contours give a feel for how tightly each parameter is constrained. A long, narrow low-misfit valley, as in the temperature–thickness panel, shows a trade-off between the two parameters.
+The contours describe how misfit changes around the best fit; they are not statistical confidence regions. Individual figures show the uncalibrated fit, while group figures use the calibrated parameters. If the best misfit is exactly zero, the colour scale and contours show absolute misfit instead of a ratio. A long, narrow low-misfit valley, as in the temperature–thickness panel, shows a trade-off between the two parameters.
 
 ---
 
@@ -349,6 +357,64 @@ import pandas as pd
 summary = pd.read_excel("inversion_results/examples_sample_inversion_summary_log10.xlsx")
 ```
 
+### Calculate once and regenerate figures later
+
+Plot rendering now lives in `meltinv.plotting`. Numerical inversion does not
+import Matplotlib unless figures are requested. Existing plotting flags and
+imports such as `from meltinv.inversion import plot_results` remain supported.
+
+To save everything needed for the existing per-sample diagnostic and group
+comparison figures, opt into a plot archive during the inversion:
+
+```python
+from meltinv import invert, regenerate_figures
+
+results = invert(
+    "samples.csv",
+    individual_sample_figures=False,
+    group_comparison_figure=False,
+    plot_archive="run.zip",
+)
+# Later, even in a new Python session without samples.csv or the model grids:
+regenerate_figures("run.zip", output_dir="replotted_figures")
+```
+
+The equivalent CLI commands are:
+
+```sh
+meltinv invert samples.csv --no_group_comparison_figure --plot_archive run.zip
+meltinv plot run.zip --output_dir replotted_figures
+```
+
+`regenerate_figures` accepts `individual_sample_figures=False` or
+`group_comparison_figure=False` to render only one type; the CLI equivalents
+are `--no_individual` and `--no_groups`. Group figures retain the existing
+minimum of three fitted samples. Scientific settings and plot defaults are
+unchanged.
+
+The versioned ZIP contains a JSON manifest (run settings and package version),
+numeric NumPy arrays and string labels; loading does not use pickle. It saves
+the cleaned, optionally fractionation-corrected REE observations actually used,
+fitted REE curves and bounds, uncalibrated diagnostic annotations, the three
+misfit slices displayed in each diagnostic figure, and calibrated per-sample
+values for group plots. Floating-point arrays are stored without rounding.
+It is a **plotting snapshot**, not a full scientific provenance bundle or the
+complete three-dimensional search surface: arbitrary new slices require a new
+inversion. The existing Excel tables remain the full tabular output.
+
+Saving is optional because it adds computation and disk I/O. One sample's full
+surface is retained temporarily, its displayed slices are written to the archive,
+and the remaining surface is discarded. A failed run leaves any previous archive
+intact; a successful run replaces the requested archive path. When archive saving
+is disabled, the faster tabular-only path remains available. Exact pixel matches
+also require the same Matplotlib version, fonts and rendering environment.
+
+Archive saving can be included in the numerical equivalence check:
+
+```sh
+MPLBACKEND=Agg python tests/compare_search_revision.py --reference 0196fe6 --modern --plot-archive
+```
+
 ### Group inversion: the group_samples branch
 
 This version (`main`) always inverts each sample individually. The **`group_samples`** branch keeps the older group inversion, which fits one solution to all samples at a location together (at least 2 samples per location). To use it, install that branch instead:
@@ -365,16 +431,44 @@ On that branch, group inversion is the default and `--per_sample` switches to th
 
 ## 5. How the inversion works
 
-1. **Forward-model grid.** The package ships with precomputed melting models (`meltinv/data/*.npy`). They give the REE concentrations of accumulated melts, with min/max envelopes, melting depths, melt fractions (`F`) and melting rates (`M`). The grid spans mantle excess temperature (65 to ~350 K in 5 K steps) and lithospheric thickness (15 to ~120 km in 2 km steps).
+1. **Forward-model grid.** The package ships with precomputed melting models (`meltinv/data/*.npy`). They give the REE concentrations of accumulated melts, with min/max envelopes, melting depths, melt fractions (`F`) and melting rates (`M`). The grid spans mantle excess temperature (65 to 350 K in 5 K steps) and lithospheric thickness (16 to 120 km in 2 km steps).
 2. **Source enrichment.** For each trial enrichment value, the model REE concentrations are rescaled for a source made by mixing:
    - primitive mantle (McDonough & Sun, 1995) with 0 to 15% basalt (Sun & McDonough, 1989), in steps of 0.1%; or
    - with `--depleted`, primitive mantle with 5 to 100% depleted mantle (Salters & Stracke, 2004).
-3. **Misfit.** For each sample, the misfit is the root-mean-square (RMS) of the log10 residuals over the N usable REE, corrected for the 3 fitted parameters (temperature, thickness and enrichment): misfit = √( Σ (log10 c_model − log10 c_sample)² / (N − 3) ). Dividing by N − 3 rather than N keeps misfits comparable between samples with different numbers of REE. A misfit of 0.1 means the model and sample differ by a factor of about 10^0.1 ≈ 1.26 (26%) on a typical element.
+3. **Misfit.** For each sample, the misfit is the root-mean-square (RMS) of the log10 residuals over the N usable REE, corrected for the 3 fitted parameters (temperature, thickness and enrichment): misfit = √( Σ (log10 c_model − log10 c_sample)² / (N − 3) ). This is the current residual statistic, not a reduced chi-squared: no measurement uncertainties or REE error covariance are used. Its behaviour across different numbers and combinations of REE still needs synthetic validation. The ordinary RMS log residual is this statistic multiplied by √((N − 3)/N), so its numerical value should not be interpreted directly as a typical percentage error.
 4. **Best fit.** For each sample, the temperature, thickness and enrichment combination with the lowest misfit is reported.
 5. **Calibration.** The grid assumes a peridotite source. The best-fit temperature and thickness are then corrected for the effect of a pyroxenite (G2) component on the solidus. This uses flux-weighted mixing (Phipps Morgan, 2001; Sobolev et al., 2007), with the pyroxenite fraction taken from the inverted enrichment. The results are the `_cali` columns.
 6. **Location summary.** The per-sample results are combined for each location with a misfit-weighted average, as described in [Step 4](#step-4-reading-the-results).
 
 ---
+
+For a guided route through the implementation and its result fields, see the
+[researcher code guide](docs/code-guide.md).
+
+### Search implementation and reproducibility
+
+The search prepares each sample's usable log10 concentrations once and caches
+log10 model predictions for each enrichment value across samples. The cache is
+local to a run (about 63 MiB for all 171 enrichments on the supplied grid).
+The multiplication before the logarithm and the residual summation order are
+preserved. Equal minima select the first enrichment searched, then the first
+cell in row-major order. Full misfit surfaces and diagnostic percentiles are
+retained when individual-sample figures or an archive are requested; the output tables
+and scientific settings are the same either way.
+
+To compare a change with a previous Git revision, including every value in the
+returned table and the two exported spreadsheets:
+
+```bash
+python tests/compare_search_revision.py --reference 0196fe6
+python tests/compare_search_revision.py --reference 0196fe6 --modern
+```
+
+The second command uses all bundled pre-corrected modern-OIB samples. Both
+implementations run sequentially with identical inputs and plotting disabled.
+The script requires exact table equality and reports wall times; these timings
+include input/output but exclude olivine correction and figure generation.
+It checks implementation equivalence, not the physical validity of the model.
 
 ## 6. Troubleshooting
 
