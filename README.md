@@ -32,9 +32,9 @@ The package can be used from the **command line** or from **Python**. This READM
 4. [Going further](#4-going-further)
    - [Using the results in Python](#using-the-results-in-python)
    - [Save a run and regenerate figures](#calculate-once-and-regenerate-figures-later)
-   - [Reading the source code](docs/code-guide.md)
    - [Group inversion: the group_samples branch](#group-inversion-the-group_samples-branch)
 5. [How the inversion works](#5-how-the-inversion-works)
+   - [Reading the source code](#reading-the-source-code)
 6. [Troubleshooting](#6-troubleshooting)
 7. [Running the tests](#7-running-the-tests)
 8. [Citation](#8-citation)
@@ -359,12 +359,9 @@ summary = pd.read_excel("inversion_results/examples_sample_inversion_summary_log
 
 ### Calculate once and regenerate figures later
 
-Plot rendering now lives in `meltinv.plotting`. Numerical inversion does not
-import Matplotlib unless figures are requested. Existing plotting flags and
-imports such as `from meltinv.inversion import plot_results` remain supported.
-
-To save everything needed for the existing per-sample diagnostic and group
-comparison figures, opt into a plot archive during the inversion:
+To restyle or redraw figures without rerunning the inversion, save a plot
+archive during the run. It holds everything the individual and group
+comparison figures need:
 
 ```python
 from meltinv import invert, regenerate_figures
@@ -388,32 +385,15 @@ meltinv plot run.zip --output_dir replotted_figures
 
 `regenerate_figures` accepts `individual_sample_figures=False` or
 `group_comparison_figure=False` to render only one type; the CLI equivalents
-are `--no_individual` and `--no_groups`. Group figures retain the existing
-minimum of three fitted samples. Scientific settings and plot defaults are
-unchanged.
+are `--no_individual` and `--no_groups`.
 
-The versioned ZIP contains a JSON manifest (run settings and package version),
-numeric NumPy arrays and string labels; loading does not use pickle. It saves
-the cleaned, optionally fractionation-corrected REE observations actually used,
-fitted REE curves and bounds, uncalibrated diagnostic annotations, the three
-misfit slices displayed in each diagnostic figure, and calibrated per-sample
-values for group plots. Floating-point arrays are stored without rounding.
-It is a **plotting snapshot**, not a full scientific provenance bundle or the
-complete three-dimensional search surface: arbitrary new slices require a new
-inversion. The existing Excel tables remain the full tabular output.
-
-Saving is optional because it adds computation and disk I/O. One sample's full
-surface is retained temporarily, its displayed slices are written to the archive,
-and the remaining surface is discarded. A failed run leaves any previous archive
-intact; a successful run replaces the requested archive path. When archive saving
-is disabled, the faster tabular-only path remains available. Exact pixel matches
-also require the same Matplotlib version, fonts and rendering environment.
-
-Archive saving can be included in the numerical equivalence check:
-
-```sh
-MPLBACKEND=Agg python tests/compare_search_revision.py --reference 0196fe6 --modern --plot-archive
-```
+The archive is a **plotting snapshot**: the REE observations actually used
+(after any correction), the fitted patterns, the three misfit slices shown in
+each individual figure and the calibrated values used by the group figures.
+It does not hold the full search surface, so a different slice needs a new
+inversion; the Excel tables remain the full results. Saving makes a run slower
+(about 26 s → 43 s for the full modern-OIB dataset in one timing test), so it is off
+by default. A failed run leaves any earlier archive at that path untouched.
 
 ### Group inversion: the group_samples branch
 
@@ -440,35 +420,29 @@ On that branch, group inversion is the default and `--per_sample` switches to th
 5. **Calibration.** The grid assumes a peridotite source. The best-fit temperature and thickness are then corrected for the effect of a pyroxenite (G2) component on the solidus. This uses flux-weighted mixing (Phipps Morgan, 2001; Sobolev et al., 2007), with the pyroxenite fraction taken from the inverted enrichment. The results are the `_cali` columns.
 6. **Location summary.** The per-sample results are combined for each location with a misfit-weighted average, as described in [Step 4](#step-4-reading-the-results).
 
+The individual diagnostic figures show the **uncalibrated** fit from step 4 (`T_mean`, `depth_mean`). The results tables' `_cali` columns and the group comparison figures use the **calibrated** values from step 5, so a sample's temperature can differ between the two kinds of figure.
+
+### Reading the source code
+
+| Question | Start here |
+|---|---|
+| What arguments can I pass? | `core.py`: `invert` is the Python entry point; `cli.py` maps command-line options onto the same call. |
+| Which observations are used? | `inversion.py`: `invert_melt_condition` reads and optionally corrects the data, cleans the REEs and applies the six-usable-REE rule. |
+| What exactly is searched? | `inversion.py`: `get_enrichment_values`, `source_composition_mix`, then `invert_single_group`. Despite its name, the workflow calls it for **one sample** at a time. Its docstring lists every field of the result. |
+| Where is the misfit calculated? | `_misfit.py`: `prepare_observations` and `evaluate_misfit`. Model log-concentrations are cached once per enrichment value and reused across samples. |
+| What does calibration change? | `inversion.py`: `calibration` adjusts the fitted temperature and thickness **after** the REE fit; it does not refit. |
+| How are locations summarised? | `inversion.py`: `aggregate_per_sample_results`. |
+| How do I change a figure? | `plotting.py`: `plot_results` (individual figures) and `plot_group_comparison` (group figures). |
+| How do I redraw figures from an old run? | `plot_archive.py`: `regenerate_figures`. Its module docstring describes the archive layout. |
+
+Some names are historical and can mislead:
+
+- `p_idx` is a lithospheric-thickness row (`16 + 2 × p_idx` km), not a pressure; `t_idx` is a temperature column (`65 + 5 × t_idx` K).
+- `pres_mean`, `pres_min` and `pres_max` (and their `_cali` versions) are melting **depths in km**. Calibration divides the mean depth by 33 to get GPa.
+- `basalt_percentage` is the source-enrichment parameter: positive values mix primitive mantle with basalt, negative values with depleted mantle.
+- `global_min_value` always equals `misfit_value`, and `ratio_of_local_global_misfit` is always 1. Both are kept so the output columns do not change.
+
 ---
-
-For a guided route through the implementation and its result fields, see the
-[researcher code guide](docs/code-guide.md).
-
-### Search implementation and reproducibility
-
-The search prepares each sample's usable log10 concentrations once and caches
-log10 model predictions for each enrichment value across samples. The cache is
-local to a run (about 63 MiB for all 171 enrichments on the supplied grid).
-The multiplication before the logarithm and the residual summation order are
-preserved. Equal minima select the first enrichment searched, then the first
-cell in row-major order. Full misfit surfaces and diagnostic percentiles are
-retained when individual-sample figures or an archive are requested; the output tables
-and scientific settings are the same either way.
-
-To compare a change with a previous Git revision, including every value in the
-returned table and the two exported spreadsheets:
-
-```bash
-python tests/compare_search_revision.py --reference 0196fe6
-python tests/compare_search_revision.py --reference 0196fe6 --modern
-```
-
-The second command uses all bundled pre-corrected modern-OIB samples. Both
-implementations run sequentially with identical inputs and plotting disabled.
-The script requires exact table equality and reports wall times; these timings
-include input/output but exclude olivine correction and figure generation.
-It checks implementation equivalence, not the physical validity of the model.
 
 ## 6. Troubleshooting
 
@@ -508,6 +482,15 @@ pytest -m "slow or not slow"
 ```
 
 The same tests run automatically on GitHub for every push and pull request (see the **Actions** tab).
+
+To check that a change leaves every result unchanged, compare it with an earlier Git revision. The script runs both versions on the same input and requires every value in the returned table and both exported spreadsheets to be identical:
+
+```bash
+python tests/compare_search_revision.py --reference 0196fe6
+python tests/compare_search_revision.py --reference 0196fe6 --modern
+```
+
+The second command uses all bundled pre-corrected modern-OIB samples; add `--plot-archive` to include archive saving. The reported times include file input/output but not the olivine correction or figures. This checks that two implementations agree, not that the model is physically right.
 
 **When you change the code:**
 

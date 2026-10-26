@@ -3,6 +3,19 @@
 Only the three displayed misfit slices are saved, not the full search cube.
 Arrays retain their original precision. The archive is published atomically after
 successful inversion; a failed run does not replace an existing archive.
+
+Archive layout (format_version 1):
+- manifest.json: format version, package and library versions, run options,
+  and the location/count/file entry for each fitted sample.
+- samples/000000.npz, ...: observations in REE order, the fitted patterns and
+  uncalibrated annotations consumed by plotting.plot_results, misfit_grid,
+  temperature_slice (enrichment, temperature) at the best thickness,
+  depth_slice (enrichment, thickness) at the best temperature, and grid_shape.
+- summary.npz: SUMMARY_COLUMNS, the calibrated values used by group plots.
+
+It is a plotting snapshot, not a provenance record: arbitrary new slices need
+a new inversion. Added manifest fields do not change version 1's arrays; the
+reader rejects unknown versions.
 """
 from importlib.metadata import version
 from io import BytesIO
@@ -37,8 +50,8 @@ class PlotArchiveWriter:
     """Write one sample at a time rather than retaining all search surfaces.
 
     Use as a context manager: add_sample() receives pre-calibration fit results;
-    add_summary() receives the final calibrated table. See docs/code-guide.md
-    for the on-disk schema. The inversion owns/relinquishes the full surface.
+    add_summary() receives the final calibrated table. The module docstring
+    gives the on-disk layout. The inversion owns/relinquishes the full surface.
     """
 
     def __init__(self, path, settings):

@@ -3,8 +3,25 @@
 Start at invert_melt_condition for the complete workflow: clean observations,
 fit each sample, apply post-fit calibration, then summarise by location.
 Plot rendering lives in plotting.py; plot_archive.py saves optional snapshots.
-See docs/code-guide.md for array axes, result fields and the distinction between
-uncorrected best-fit parameters and calibrated output columns.
+
+Array axes: packaged REE grids are (REE, thickness, temperature); one misfit
+grid is (thickness, temperature); the full search surface is (enrichment,
+thickness, temperature). The bundled grids have 53 thickness rows and 58
+temperature columns: row p_idx is 16 + 2*p_idx km and column t_idx is
+65 + 5*t_idx K.
+
+Names that can mislead:
+- p_idx is a thickness row, not a pressure.
+- pres_mean/pres_min/pres_max hold melting depths in km; calibration divides
+  the mean depth by 33 to obtain GPa.
+- basalt_percentage is the source-enrichment parameter: positive values mix
+  primitive mantle with basalt, negative values with depleted mantle.
+- min_sample_count in the low-level search is a count per element; the public
+  workflow passes 1. It is separate from the six-usable-REE acceptance rule.
+
+T_mean, depth_mean and basalt_percentage are the uncalibrated REE fit, which the
+individual diagnostic figures show. calibration() then adjusts temperature and
+thickness without refitting; the _cali columns and group figures use those.
 """
 import pandas as pd
 from pathlib import Path
@@ -121,7 +138,7 @@ def load_all_grids():
 
     REE concentration arrays are ordered (element, thickness, temperature).
     The remaining summary arrays are ordered (thickness, temperature).
-    See docs/code-guide.md for units and the legacy pres_* field names.
+    Concentrations are in ppm; the legacy pres_* arrays are melting depths in km.
     """
     ree_variables = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
                      'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu']
@@ -227,15 +244,32 @@ def invert_single_group(df, location, count, grids, test_enrichment_values, min_
 
     The name is retained for compatibility. The public workflow gives each
     sample its own location label, so this function normally fits one sample.
-    Return None if no valid fit exists; otherwise return the result dictionary
-    documented in docs/code-guide.md. No calibration is applied here.
+    Return None if no valid fit exists, otherwise the dictionary below.
+    No calibration is applied here; the caller does that.
 
     retain_diagnostics preserves full misfit surfaces for plotting; turn it off
     for tabular results only. A run-local model_cache reuses log predictions
     across samples. Equal minima retain the first enrichment and row-major cell.
-    T_mean is plume excess temperature in K; depth_mean is lithospheric thickness
-    in km. The legacy pres_* keys contain melting depths in km, not GPa.
-    These are uncorrected best-fit quantities; calibration is applied by the caller.
+
+    Result fields:
+    - min_idx, basalt_idx: best (thickness row, temperature column) and
+      enrichment index.
+    - T_mean, depth_mean, basalt_percentage: uncalibrated excess temperature (K),
+      lithospheric thickness (km) and source enrichment.
+    - pres_*, F_*, M_*: melting depth (km), melt fraction and melting rate
+      summaries at the best cell, from the packaged forward grids.
+    - misfit_value, global_min_value: the same exhaustive-search minimum; both
+      names are kept for compatibility.
+    - global_flat_index: best cell in (enrichment, thickness, temperature) order.
+    - ratio_of_local_global_misfit: compatibility field, always 1.
+    - mean_ree, low_ree, high_ree: source-scaled model REE and its forward-model
+      min/max envelope (ppm), not statistical confidence limits.
+    - mean_ree_global: same as mean_ree, kept for the plot interface.
+    - misfit_grid: (thickness, temperature) slice at the best enrichment.
+    - full_3d_grids: complete surface if retain_diagnostics, otherwise None.
+    - enrichment_values: ordered search values (irregular on the depleted side).
+    - threshold: legacy tenth-percentile diagnostic or None; not a filter.
+    - litho_thickness_ref: optional independent thickness, never used in the fit.
     """
     ree_variables = grids["ree_variables"]
     simulation_concentrations = grids["simulation"]

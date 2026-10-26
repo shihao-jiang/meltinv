@@ -39,8 +39,8 @@ def plot_results(df, location, count, result, output_dir="inversion_figures"):
     df contains cleaned primary-magma REEs in ppm and a location column.
     result comes from invert_single_group(retain_diagnostics=True), or from a
     saved plotting archive. The labels and slices describe the *uncalibrated*
-    best fit; group plots below use calibrated per-sample results. See
-    docs/code-guide.md for the dictionary fields and array axes.
+    best fit; group plots below use calibrated per-sample results. The
+    invert_single_group docstring lists the dictionary fields and array axes.
     """
     if result["min_idx"] is None:
         return
