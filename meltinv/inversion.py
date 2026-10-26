@@ -611,20 +611,18 @@ def aggregate_per_sample_results(results_df):
     return pd.DataFrame(rows)
 
 
-def plot_group_comparison(results_df, min_count=3):
+def plot_group_comparison(results_df, min_count_for_std=3):
     """
     Plot one figure per location comparing its per-sample temperature,
-    thickness and enrichment results. Locations with fewer than min_count samples are skipped.
+    thickness and enrichment results. The histograms show the 1/misfit-weighted mean,
+    and the ±1 std band only for locations with at least min_count_for_std samples.
     """
     results_dir = Path("inversion_figures")
     results_dir.mkdir(exist_ok=True)
 
     for location, group in results_df.groupby("location"):
         group_number = len(group)
-        if group_number < min_count:
-            print(f"Skipping group comparison figure for {location}: "
-                  f"{group_number} sample(s), at least {min_count} needed.")
-            continue
+        show_std = group_number >= min_count_for_std
 
         thickness = group["depth_mean_cali"].to_numpy(dtype=float)
         temperature = group["T_mean_cali"].to_numpy(dtype=float)
@@ -677,7 +675,8 @@ def plot_group_comparison(results_df, min_count=3):
             ax = fig.add_subplot(gs_sub[i])
             ax.tick_params(axis="both", labelsize=label_size)
             ax.hist(values, bins=bins, color=color, edgecolor="black")
-            ax.axvspan(mean - std, mean + std, color="black", alpha=0.15)
+            if show_std:
+                ax.axvspan(mean - std, mean + std, color="black", alpha=0.15)
             ax.axvline(mean, color="black", linestyle="--", linewidth=1.5)
             ax.set_xlim(*xlim)
             ax.text(0.0, 1.02, title, transform=ax.transAxes,

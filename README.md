@@ -232,10 +232,10 @@ Results saved to: .../inversion_results/examples_sample_inversion_log10.xlsx
 Results saved to: .../inversion_results/examples_sample_inversion_summary_log10.xlsx
 Figure saved to: .../inversion_figures/group_comparison_Austral-Cook Islands (Atiu)_N3.png
 ...
-Skipping group comparison figure for Austral-Cook Islands (Marotiri): 1 sample(s), at least 3 needed.
+Figure saved to: .../inversion_figures/group_comparison_Austral-Cook Islands (Marotiri)_N1.png
 ```
 
-Marotiri has only one sample. It is still inverted and appears in both results files, but it is too small for a group comparison figure.
+Marotiri has only one sample. It is still inverted, appears in both results files and gets a group comparison figure, but with no standard-deviation band (see Step 5).
 
 ### Step 4: Reading the results
 
@@ -246,7 +246,7 @@ The inversion writes two results files.
 This file has one row per location, made by combining the per-sample results:
 
 1. Every column is averaged over all inverted samples at that location, with weights of `1 / misfit_value`, so better-fitting samples count for more.
-2. `T_mean_cali`, `depth_mean_cali` and `basalt_percentage` also get `_err_minus` and `_err_plus` columns (weighted mean ± weighted standard deviation). For `basalt_percentage`, these error bounds use a compressed scale in which negative (depleted) values are divided by 100.
+2. `T_mean_cali`, `depth_mean_cali` and `basalt_percentage` also get `_err_minus` and `_err_plus` columns (weighted mean ± weighted standard deviation), in the same units as the mean. With a single sample the standard deviation is zero, so both bounds equal the mean.
 
 For the example, the main columns look like this:
 
@@ -297,7 +297,7 @@ One figure per location is saved as `inversion_figures/group_comparison_{locatio
 | **(c)** | Excess temperature vs relative enrichment |
 | **(d-1) to (d-3)** | Histograms of temperature, thickness and enrichment. The dashed line is the misfit-weighted mean and the grey band is ± 1 weighted standard deviation, computed the same way as the location summary in Step 4. |
 
-In panels (a) to (c), points are coloured by misfit; darker blue is a better fit. Depleted enrichment values (negative) are divided by 100 so they fit on the same axis. Locations with fewer than 3 samples are skipped, with a message.
+In panels (a) to (c), points are coloured by misfit; darker blue is a better fit. Depleted enrichment values (negative) are divided by 100 so they fit on the same axis. Panel (d) marks the weighted mean of each histogram and, for locations with at least 3 samples, a ±1 standard-deviation band; locations with one or two samples get the mean only.
 
 The axes are fixed (temperature 50 to 300 K, thickness 15 to 130 km, enrichment −1.2 to 16) so that figures for different locations can be compared directly. Samples outside these ranges are not shown.
 
