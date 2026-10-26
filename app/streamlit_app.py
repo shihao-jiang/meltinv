@@ -304,8 +304,7 @@ st.markdown(
 )
 st.caption(
     "Your file is processed in a temporary folder that is deleted as soon as the run finishes, "
-    "and is not stored or shared. For unpublished data you would rather not upload, "
-    f"[install meltinv]({REPOSITORY}#1-installation) on your own computer."
+    "and is not stored or shared."
 )
 
 # 1. Prepare -------------------------------------------------------------------
