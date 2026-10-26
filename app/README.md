@@ -2,7 +2,8 @@
 
 A one-page website for people who do not use Python: upload an `.xlsx` or `.csv`
 file, choose the options, run meltinv, and download a `.zip` with the results
-tables, figures, a plot archive and a short README. The app is
+tables, figures, a plot archive and a short README. [Tutorial 1](../tutorials/01_web_app.md)
+walks a new user through it. The app is
 [`streamlit_app.py`](streamlit_app.py); its look is set in
 [`.streamlit/config.toml`](.streamlit/config.toml).
 

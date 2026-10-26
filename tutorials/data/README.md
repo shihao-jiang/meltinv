@@ -5,7 +5,7 @@
 | `modern_OIB.xlsx` | 1,801 modern ocean-island basalts from 112 locations: major elements, REE and a seismic estimate of lithospheric thickness (`thickness`) | Compiled from the literature; the original publication of each sample is given in the `reference` and `citations` columns. **Please cite the original publications when using these data.** |
 | `literature_excess_temperatures.csv` | Published excess temperatures for each plume (`island_name`) | `Tex_Putirka_2008`: Putirka (2008); `Tex_Bao_2022`: Bao et al. (2022) |
 | `PF16_melting_pressures.csv` | Melting pressure (GPa) for each sample (`island_name`), from the thermobarometer of Plank & Forsyth (2016) applied to the Fo90 primary-magma compositions | Calculated for the meltinv paper |
-| `modern_OIB_precomputed/` | The full meltinv results for `modern_OIB.xlsx`, so that Tutorial 2 can make the paper figures without the 10-minute calculation | Produced by `tutorials/02_modern_OIB.ipynb` with `RUN_FULL_ANALYSIS = True` |
+| `modern_OIB_precomputed/` | The full meltinv results for `modern_OIB.xlsx`, so that Tutorial 3 can make the paper figures without the 10-minute calculation | Produced by `tutorials/03_modern_OIB.ipynb` with `RUN_FULL_ANALYSIS = True` |
 
 References:
 

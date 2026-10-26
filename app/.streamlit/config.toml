@@ -10,5 +10,8 @@ font = "sans serif"
 [server]
 maxUploadSize = 20                    # MB; a 3,000-sample spreadsheet is well under 2 MB
 
+[client]
+toolbarMode = "viewer"                # hide Streamlit's developer menu and "Deploy" button
+
 [browser]
 gatherUsageStats = false

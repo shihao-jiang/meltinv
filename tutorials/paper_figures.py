@@ -1,5 +1,5 @@
 """
-Paper figure for the modern ocean-island basalt comparison (used by 02_modern_OIB.ipynb).
+Paper figure for the modern ocean-island basalt comparison (used by 03_modern_OIB.ipynb).
 
 The figure compares meltinv's location summaries with independent estimates, grouped by
 volcanic province and ordered by mean seismic lithospheric thickness:

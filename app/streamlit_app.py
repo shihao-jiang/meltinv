@@ -44,8 +44,15 @@ SUMMARY_COLUMNS = {
 
 # ---------------------------------------------------------------- input checks
 
+# Other spellings of the required column names, to suggest a rename
+ALIASES = {
+    "location": ["island", "volcano", "locality", "site", "sample location", "group"],
+    "FeO": ["feot", "feo*", "feo(t)", "feotot", "feo total", "feo_t", "feot (wt%)"],
+}
+
+
 def read_table(name, data):
-    """Read an uploaded .xlsx/.xls/.csv file into a DataFrame."""
+    """Read an uploaded .xlsx/.xls/.csv file into a DataFrame (first sheet only)."""
     suffix = Path(name).suffix.lower()
     if suffix == ".csv":
         return pd.read_csv(io.BytesIO(data))
@@ -54,31 +61,113 @@ def read_table(name, data):
     raise ValueError("Please upload an .xlsx, .xls or .csv file.")
 
 
+def _simplify(name):
+    """Lower case, without units, spaces or punctuation: 'La (ppm)' -> 'la'."""
+    name = re.sub(r"[\(\[].*?[\)\]]|\b(ppm|wt%|wt\.%|wt)\b", "", str(name).lower())
+    return re.sub(r"[^a-z0-9*]", "", name)
+
+
+def suggest_renames(df, wanted):
+    """Map each wanted column that is missing to a similar existing column, where one exists."""
+    by_simple = {_simplify(c): c for c in df.columns}
+    renames = {}
+    for column in wanted:
+        if column in df.columns:
+            continue
+        for candidate in [column, *ALIASES.get(column, [])]:
+            if _simplify(candidate) in by_simple:
+                renames[column] = by_simple[_simplify(candidate)]
+                break
+    return renames
+
+
+def header_row_hint(data):
+    """If 'location' appears in a later row, the column names probably do not start in row 1."""
+    for i, row in data.head(10).iterrows():
+        if any(str(v).strip().lower() == "location" for v in row.values):
+            return i + 2   # spreadsheet row number: header is row 1, data start at row 2
+    return None
+
+
 def check_input(df):
-    """Return (errors, notes, usable_ree_per_sample, has_oxides) for an input table."""
-    errors, notes = [], []
+    """Check an input table. Return (problems, notes, has_oxides, oxide_problem).
+
+    problems and notes are lists of (title, explanation and suggested fix);
+    problems stop the run, notes do not.
+    """
+    problems, notes = [], []
     missing = [c for c in ["location", *REE] if c not in df.columns]
     if missing:
-        errors.append("Missing required column(s): " + ", ".join(f"`{c}`" for c in missing)
-                      + ". Column names are case-sensitive.")
-        return errors, notes, None, False
+        renames = suggest_renames(df, missing)
+        fix = ["Column names must match exactly, including capital letters."]
+        if renames:
+            fix.append("Rename these columns in your file: " + "; ".join(
+                f"`{found}` → `{column}`" for column, found in renames.items()) + ".")
+        row = header_row_hint(df)
+        if row:
+            fix.append(f"The column names seem to be in row {row} of your sheet. Delete the rows "
+                       "above them so the names are in the first row.")
+        if not renames and not row:
+            fix.append("Download the template above and copy your data into it.")
+        problems.append(("Missing columns: " + ", ".join(missing), " ".join(fix)))
+        return problems, notes, False, None
+
     if len(df) == 0:
-        errors.append("The file has no rows.")
+        problems.append(("The file has no samples",
+                         "Put the column names in the first row and one sample per row below them."))
     if len(df) > MAX_SAMPLES:
-        errors.append(f"The file has {len(df)} samples; this website accepts up to {MAX_SAMPLES}. "
-                      "Split the file, or install meltinv on your own computer.")
+        problems.append((f"Too many samples ({len(df)})",
+                         f"This website accepts up to {MAX_SAMPLES} samples per file. Split the file "
+                         f"into smaller files, or [install meltinv]({REPOSITORY}#1-installation) "
+                         "on your own computer, which has no limit."))
     blank = df["location"].isna() | df["location"].astype(str).str.strip().eq("")
     if blank.any():
-        errors.append(f"{blank.sum()} row(s) have no `location`. Every sample needs one.")
+        rows = ", ".join(str(i + 2) for i in df.index[blank][:10])
+        problems.append((f"{blank.sum()} sample(s) have no location",
+                         f"Fill in the `location` column in spreadsheet row(s) {rows}"
+                         f"{' and others' if blank.sum() > 10 else ''}. Samples with the same "
+                         "location are summarised together; give a sample its own name to treat it alone."))
 
-    usable = df[REE].apply(pd.to_numeric, errors="coerce").gt(0).sum(axis=1)
-    too_few = int((usable < MIN_REE).sum())
-    if too_few == len(df) and len(df) > 0:
-        errors.append(f"No sample has at least {MIN_REE} usable REE values, so nothing can be inverted.")
-    elif too_few:
-        notes.append(f"{too_few} sample(s) have fewer than {MIN_REE} usable REE values and will be skipped.")
-    has_oxides = all(c in df.columns for c in OXIDES)
-    return errors, notes, usable, has_oxides
+    values = df[REE].apply(pd.to_numeric, errors="coerce")
+    text = df[REE].apply(lambda col: col.map(lambda v: isinstance(v, str) and v.strip() != ""))
+    commas = df[REE].apply(lambda col: col.map(
+        lambda v: isinstance(v, str) and re.fullmatch(r"\s*\d+,\d+\s*", v) is not None))
+    if commas.any().any():
+        problems.append(("Some REE values use a decimal comma",
+                         f"{int(commas.sum().sum())} value(s), such as `{df[REE][commas].stack().iloc[0]}`, "
+                         "use a comma as the decimal point. Change them to a full stop (1,25 → 1.25), "
+                         "or save the file from Excel as .xlsx rather than .csv."))
+    elif text.any().any():
+        example = df[REE][text].stack().iloc[0]
+        notes.append(("Some REE cells contain text",
+                      f"{int(text.sum().sum())} cell(s), such as `{example}`, are text and are treated as "
+                      "missing values. That is right for entries like `bdl` or `n.d.`; if any are real "
+                      "values, remove the text and keep only the number."))
+
+    usable = values.gt(0).sum(axis=1)
+    too_few = usable < MIN_REE
+    if too_few.all() and len(df) > 0:
+        problems.append((f"No sample has at least {MIN_REE} REE values",
+                         "Check that the REE columns hold numbers in ppm, not text or blanks."))
+    elif too_few.any():
+        rows = ", ".join(str(i + 2) for i in df.index[too_few][:10])
+        notes.append((f"{too_few.sum()} sample(s) will be skipped",
+                      f"They have fewer than {MIN_REE} usable REE values (spreadsheet row(s) {rows}"
+                      f"{' and others' if too_few.sum() > 10 else ''}). The other samples are inverted normally."))
+
+    missing_oxides = [c for c in OXIDES if c not in df.columns]
+    oxide_problem = None
+    if missing_oxides:
+        renames = suggest_renames(df, missing_oxides)
+        oxide_problem = ("The olivine correction needs the major oxides " + ", ".join(
+            f"`{c}`" for c in OXIDES) + f"; this file is missing {', '.join(missing_oxides)}.")
+        if renames:
+            oxide_problem += " Rename: " + "; ".join(f"`{found}` → `{c}`" for c, found in renames.items()) + "."
+        if "FeO" in missing_oxides and any(_simplify(c).startswith("fe2o3") for c in df.columns):
+            oxide_problem += (" If you only have Fe2O3 (total iron), add a `FeO` column equal to "
+                              "0.8998 × Fe2O3.")
+        oxide_problem += " Without them, the REE are used as they are."
+    return problems, notes, not missing_oxides, oxide_problem
 
 
 def template_bytes():
@@ -242,7 +331,10 @@ if EXAMPLE_FILE.exists():
 
 # 2. Upload --------------------------------------------------------------------
 st.header("2. Upload", divider="gray")
-uploaded = st.file_uploader("Your samples", type=["xlsx", "xls", "csv"], label_visibility="collapsed")
+uploaded = st.file_uploader("Your samples", type=["xlsx", "xls", "csv"], label_visibility="collapsed",
+                            help="One file at a time. For Excel files, only the first sheet is read.")
+st.caption("One file at a time; to analyse several datasets together, put them in one file. "
+           "For Excel files only the first sheet is read.")
 if uploaded is None:
     st.session_state.pop("result", None)
     st.stop()
@@ -254,19 +346,22 @@ if st.session_state.get("upload_id") != uploaded.file_id:
 try:
     data = read_table(uploaded.name, uploaded.getvalue())
 except Exception as exc:          # unreadable or corrupt files
-    st.error(f"Could not read the file: {exc}")
+    st.error(f"The file could not be opened ({exc}). Open it in Excel, check that the data are on the "
+             "first sheet with the column names in the first row, and save it again as .xlsx.",
+             title="Could not read the file")
     st.stop()
 
-errors, notes, usable, has_oxides = check_input(data)
+problems, notes, has_oxides, oxide_problem = check_input(data)
 n_locations = data["location"].nunique() if "location" in data.columns else 0
 st.markdown(f"**{len(data)} samples** from **{n_locations} locations**.")
-for message in errors:
-    st.error(message)
-for message in notes:
-    st.warning(message)
+for title, fix in problems:
+    st.error(fix, title=title)
+for title, fix in notes:
+    st.warning(fix, title=title)
 with st.expander("Preview the first rows"):
-    st.dataframe(data.head(20), hide_index=True)
-if errors:
+    st.dataframe(data.head(20), hide_index=True, alt="First rows of the uploaded file")
+if problems:
+    st.info("Fix the problems above in your file, then upload it again.")
     st.stop()
 
 # 3. Options -------------------------------------------------------------------
@@ -276,9 +371,8 @@ correction = st.checkbox(
     value=has_oxides, disabled=not has_oxides,
     help="Adds olivine back until each melt is in equilibrium with mantle olivine, using meltPT. "
          "Leave this off if your file already contains primary-magma compositions.")
-if not has_oxides:
-    st.caption("The correction needs the 10 major-oxide columns, which this file does not have, "
-               "so the REE are used as they are.")
+if oxide_problem:
+    st.caption(oxide_problem)
 src_Fo, max_olivine_addition = 0.9, 0.5
 if correction:
     a, b = st.columns(2)
@@ -287,9 +381,9 @@ if correction:
     max_olivine_addition = b.number_input("Maximum olivine addition", 0.1, 1.0, 0.5, 0.05,
                                           format="%.2f", help="Maximum mass fraction of olivine added.")
 
-depleted_mode = st.radio(
+depleted_mode = st.segmented_control(
     "Source enrichment range", ["Enriched only", "Some locations may be depleted", "All locations may be depleted"],
-    horizontal=True,
+    default="Enriched only", required=True,
     help="By default the source is primitive mantle plus 0–15% basalt. Locations marked as possibly "
          "depleted also search mixtures of primitive and depleted mantle.")
 depleted = []
@@ -336,7 +430,8 @@ if result:
     st.success(f"Inverted {n_fitted} samples. Download everything below: the results tables, "
                "figures, settings and a plot archive for redrawing the figures later.")
     st.download_button("Download all results (.zip)", result["zip"], f"{result['name']}_meltinv_results.zip",
-                       mime="application/zip", type="primary", width="stretch", on_click="ignore")
+                       mime="application/zip", type="primary", width="stretch", on_click="ignore",
+                       icon=":material/download:")
     if result["skipped"]:
         with st.expander(f"{len(result['skipped'])} message(s) about skipped samples or figures"):
             st.text("\n".join(result["skipped"]))
@@ -346,12 +441,14 @@ if result:
         st.caption("Misfit-weighted means over the samples at each location, after the T–P correction. "
                    "The downloaded tables also give ±1 standard deviation and every other column.")
         columns = [c for c in SUMMARY_COLUMNS if c in result["summary"].columns]
-        st.dataframe(result["summary"][columns].rename(columns=SUMMARY_COLUMNS).round(2), hide_index=True)
+        st.dataframe(result["summary"][columns].rename(columns=SUMMARY_COLUMNS).round(2), hide_index=True,
+                     alt="Inverted temperature, thickness, enrichment and misfit for each location")
 
     if result["figures"]:
         st.subheader("Group comparison figures")
         location = st.selectbox("Location", list(result["figures"]))
-        st.image(result["figures"][location], width="stretch")
+        st.image(result["figures"][location], width="stretch",
+                 alt=f"Group comparison figure for {location}: temperature, thickness and enrichment of each sample")
 
     with st.expander("Full log"):
         st.code("\n".join(result["log"][-500:]), language=None)
