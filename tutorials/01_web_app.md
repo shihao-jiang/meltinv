@@ -2,8 +2,7 @@
 
 This tutorial runs a complete meltinv analysis **on the meltinv website, without any programming**. You will invert the bundled example file, **`examples.xlsx`**: 38 basalts from five Austral–Cook islands (Mangaia, Raivavae, Rapa, Atiu and Marotiri). It takes a few minutes.
 
-<!-- TODO: replace this link with the Hugging Face Space address once the website is online -->
-**Website:** https://huggingface.co/spaces/USER-NAME/meltinv
+**Website:** https://huggingface.co/spaces/shihao-jiang/meltinv
 
 If the page says the app is starting, wait a minute or two: the free server sleeps when nobody has used it for two days. You can also [run the same website on your own computer](../app/README.md#run-it-on-your-own-computer).
 
