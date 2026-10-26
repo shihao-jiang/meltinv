@@ -8,7 +8,7 @@ Step-by-step tutorials that take you through a meltinv analysis. **Tutorial 1** 
 |---|---|---|---|
 | [01 – The meltinv website](01_web_app.md) | Upload the example file to the website, choose the options, and read the downloaded results and figures. No programming | `examples.xlsx` (38 samples) | ~1 min |
 | [02 – Quick start in Python](02_python_quick_start.ipynb) | The same analysis from Python: input checks, olivine correction, results tables, figures, redrawing figures from a saved run, and a comparison with seismic thickness | `examples.xlsx` (38 samples) | ~1 min |
-| [03 – Modern ocean-island basalts](03_modern_OIB.ipynb) | The paper's comparison: a hands-on run on five locations, then the full dataset (1,801 samples, 112 locations), quality checks, a comparison with seismic, thermobarometric and published estimates, and the paper figure with and without the T–P correction | `data/modern_OIB.xlsx` and the stored full results | ~2 min (about 10 min with `RUN_FULL_ANALYSIS = True`) |
+| [03 – Modern ocean-island basalts](03_modern_OIB.ipynb) | The paper's comparison: a hands-on run on five locations, then the full dataset (1,800 samples, 112 locations), quality checks, a comparison with seismic, thermobarometric and published estimates, and the paper figure with and without the T–P correction | `data/modern_OIB.xlsx` and the stored full results | ~2 min (about 10 min with `RUN_FULL_ANALYSIS = True`) |
 
 ## Reading the tutorials online
 
