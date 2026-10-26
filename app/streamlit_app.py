@@ -318,7 +318,7 @@ with st.expander("Which columns are needed?"):
 |---|---|---|
 | `location` | always | Samples with the same location are summarised and plotted together |
 | `La` … `Lu` (14 REE) | always | Concentrations in ppm. Blank, zero, negative or text values (such as `bdl`) count as missing; each sample needs at least {MIN_REE} |
-| `SiO2`, `TiO2`, `Al2O3`, `FeO`, `CaO`, `MgO`, `MnO`, `K2O`, `Na2O`, `P2O5` | for the olivine correction | Major oxides (wt%) of the measured sample |
+| `SiO2`, `TiO2`, `Al2O3`, `FeO`, `CaO`, `MgO`, `MnO`, `K2O`, `Na2O`, `P2O5` | optional, only for the olivine correction | Major oxides (wt%) of the measured sample |
 | `thickness` | optional | An independent lithospheric thickness (km), e.g. seismic, for comparison only |
 """
     )

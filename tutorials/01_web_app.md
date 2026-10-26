@@ -18,7 +18,7 @@ meltinv reads an `.xlsx` or `.csv` file with **one row per sample**. Click **Dow
 |---|---|---|
 | `location` | always | Samples with the same location are summarised and plotted together |
 | `La` … `Lu` (14 REE) | always | Concentrations in ppm |
-| `SiO2` … `P2O5` (10 major oxides) | the olivine correction | Major-element composition (wt%) of the measured basalt |
+| `SiO2` … `P2O5` (10 major oxides) | optional, only for the olivine correction | Major-element composition (wt%) of the measured basalt |
 | `thickness` | optional | An independent estimate of lithospheric thickness (km), e.g. seismic, shown for comparison only |
 
 - Column names must match exactly, including capital letters.
