@@ -1,5 +1,7 @@
-# Hugging Face Space for the meltinv web app.
-# Copy this file and README.md (same folder) into a Docker Space. The build
+# Docker image of the meltinv web app, for hosts that run containers: a Hugging
+# Face Docker Space (which needs a paid plan since July 2026) or your own server.
+# The free option is Streamlit Community Cloud; see ../README.md.
+# For a Space, copy this file and README.md (same folder) into it. The build
 # downloads meltinv and the app from GitHub, so pushing to GitHub and then
 # choosing "Factory rebuild" in the Space settings updates the website.
 FROM python:3.11-slim
@@ -11,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
 # Branch or tag of meltinv to publish, e.g. main or v0.1.0
 ARG MELTINV_REF=main
 RUN git clone --depth 1 --branch ${MELTINV_REF} https://github.com/shihao-jiang/meltinv.git /opt/meltinv \
-    && pip install --no-cache-dir /opt/meltinv -r /opt/meltinv/app/requirements.txt
+    && pip install --no-cache-dir "/opt/meltinv[app]"
 
 # Hugging Face runs Spaces as user 1000
 RUN useradd -m -u 1000 user

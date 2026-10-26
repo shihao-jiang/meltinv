@@ -1,4 +1,7 @@
-# Extra packages for the web app; meltinv itself is installed from the repository.
-streamlit>=1.66,<2
-# Streamlit's tables use pyarrow; versions 20 and later need NumPy 2, which meltinv does not use yet
-pyarrow<20
+# Read by Streamlit Community Cloud: installs meltinv, with the web app's extra
+# packages, from the main branch on GitHub.
+# To run the app from your own copy of the code instead, use, from the repository
+# folder:  pip install -e ".[app]"
+meltinv[app] @ git+https://github.com/shihao-jiang/meltinv.git@main
+# Also listed here because the uv installer only accepts GitHub packages that are named directly
+meltPT @ git+https://github.com/shihao-jiang/meltPT_fixed.git

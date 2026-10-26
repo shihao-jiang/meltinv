@@ -22,6 +22,8 @@ license = "MIT"
 [project.optional-dependencies]
 test = ["pytest>=7"]
 tutorials = ["jupyterlab"]
+# the web app in app/; pyarrow 20 and later need NumPy 2
+app = ["streamlit>=1.66,<2", "pyarrow<20"]
 
 [project.scripts]
 meltinv = "meltinv.cli:main"
