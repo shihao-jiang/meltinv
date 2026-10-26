@@ -48,6 +48,48 @@ def test_olivine_addition_outside_0_to_1_counts_as_failed(in_tmp):
     assert out.correction_success.tolist() == [False, False]
 
 
+def test_fe3_setting_reaches_meltpt(in_tmp, monkeypatch):
+    import meltPT
+    from meltinv.frac_correction import fractionation_correction
+    seen = {}
+
+    class StopAfterSetup(Exception):
+        pass
+
+    def fake_suite(path, **kwargs):
+        seen.update(kwargs, data=pd.read_csv(path))
+        raise StopAfterSetup
+
+    monkeypatch.setattr(meltPT, "Suite", fake_suite)
+    sample = pd.DataFrame({c: [10.0] for c in ["location", *REE, *MAJORS]})
+    sample["location"] = "A"
+    sample["Fe2O3"] = 2.0
+    sample.to_csv("s.csv", index=False)
+    with pytest.raises(StopAfterSetup):
+        fractionation_correction("s.csv", fe3_fe_total=0.15)
+    assert seen["src_FeIII_totFe"] == 0.15
+    # By default all iron reaches meltPT as total FeO, so one Fe3+/sum Fe applies to every sample
+    assert seen["data"].FeO.iloc[0] == pytest.approx(10.0 + 2.0 * 0.8998)
+    assert seen["data"].Fe2O3.iloc[0] == 0.0
+    with pytest.raises(StopAfterSetup):
+        fractionation_correction("s.csv", fe3_fe_total=0.15, measured_fe3=True)
+    assert seen["data"].Fe2O3.iloc[0] == 2.0
+    assert pd.read_csv("s.csv").Fe2O3.iloc[0] == 2.0          # the input file is not modified
+
+
+def test_measured_iron_split_is_kept_and_total_iron_is_split_by_fe3(in_tmp):
+    # meltPT behaviour behind measured_fe3=True: a sample reporting both FeO and Fe2O3
+    # keeps them; a sample with total iron only is split using Fe3+/sum Fe.
+    from meltPT.parse import parse_csv
+    rows = pd.DataFrame({"Sample": ["measured", "total only"], "SiO2": 48.0, "TiO2": 2.0, "Al2O3": 13.0,
+                         "FeO": [8.0, 0.0], "Fe2O3": [3.0, 0.0], "FeO_tot": [0.0, 11.0], "MnO": 0.2,
+                         "MgO": 10.0, "CaO": 10.0, "Na2O": 2.5, "K2O": 0.5, "P2O5": 0.3})
+    rows.to_csv("fe.csv", index=False)
+    df = parse_csv("fe.csv", src_FeIII_totFe=0.1)       # meltPT renormalises oxides to 100 %
+    fe3_ratio = df.Fe2O3 * 0.8998 / (df.FeO + df.Fe2O3 * 0.8998)
+    assert fe3_ratio.tolist() == pytest.approx([3.0 * 0.8998 / (8.0 + 3.0 * 0.8998), 0.1], rel=1e-3)
+
+
 def test_importing_meltinv_does_not_load_meltpt():
     # meltPT is only needed when a correction is requested.
     code = "import sys, meltinv; print('meltPT' in sys.modules)"

@@ -49,7 +49,7 @@ Fix the file in Excel and upload it again. Open **Preview the first rows** to ch
 
 - **Correct for olivine fractionation first.** The inversion compares your data with **primary-magma** compositions. Measured basalts have usually crystallised olivine, which raises their REE concentrations. With this option on, meltinv first adds olivine back to each sample (using meltPT) until the melt is in equilibrium with mantle olivine.
   - It is ticked automatically when the file has all 10 major-oxide columns. Leave it on for measured basalts, and switch it off if your file already contains primary-magma compositions.
-  - **Mantle olivine Fo** (default 0.90) is the forsterite content of that mantle olivine; **Maximum olivine addition** (default 0.50) is the largest mass fraction of olivine that may be added.
+  - **Mantle olivine Fo** (default 0.90) is the forsterite content of that mantle olivine; **Maximum olivine addition** (default 0.50) is the largest mass fraction of olivine that may be added; **Fe³⁺/ΣFe** (default 0.10) is the fraction of each sample's total iron treated as Fe³⁺. Measured Fe2O3 is not used, because alteration often raises it.
   - Samples that cannot be corrected (usually olivine-rich, cumulate samples) are skipped rather than inverted with uncorrected compositions.
 - **Source enrichment range.** By default the mantle source is primitive mantle mixed with **0–15% basalt**. If some locations may have a **depleted** source (for example Iceland), choose **Some locations may be depleted** and select them; their search then also includes mixtures of primitive and depleted mantle. For this tutorial, keep **Enriched only**.
 - **Also make a diagnostic figure for every sample.** Adds one 4-panel figure per sample (section 6). It makes the run and the download larger, so it is off by default and available for files of up to 300 samples.
@@ -90,11 +90,13 @@ For the example, the location summary should read:
 
 | Location | Samples | Excess temperature (K) | Lithospheric thickness (km) |
 |---|---|---|---|
-| Austral-Cook Islands (Atiu) | 3 | 72.5 | 58.9 |
-| Austral-Cook Islands (Mangaia) | 14 | 102.5 | 57.9 |
-| Austral-Cook Islands (Marotiri) | 1 | 114.8 | 62.2 |
-| Austral-Cook Islands (Raivavae) | 14 | 114.3 | 62.8 |
-| Austral-Cook Islands (Rapa) | 6 | 170.9 | 91.6 |
+| Austral-Cook Islands (Atiu) | 3 | 67.7 | 60.3 |
+| Austral-Cook Islands (Mangaia) | 12 | 86.4 | 58.7 |
+| Austral-Cook Islands (Marotiri) | 1 | 106.3 | 64.5 |
+| Austral-Cook Islands (Raivavae) | 13 | 104.4 | 62.4 |
+| Austral-Cook Islands (Rapa) | 6 | 159.3 | 91.9 |
+
+Three of the 38 samples are not inverted: their MgO is above 19 wt%, so they already contain more olivine than a primary melt and the correction cannot be applied. They are listed under "Skipped samples" in the downloaded `README.txt`, with 0 usable REE because their REE are set to missing (`correction_success` is `False` in `examples_corrected.xlsx`).
 
 ## 6. Read the figures
 

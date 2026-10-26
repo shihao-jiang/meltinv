@@ -79,12 +79,41 @@ def save_fraction(file_name, sample_df, primary_composition_df):
 
     return sample_df
 
-def fractionation_correction(file_name, src_Fo=0.9, max_olivine_addition=0.4):
+def as_total_iron(df):
+    """Return a copy with all iron as total FeO (FeO = FeO_tot, Fe2O3 = 0).
+
+    meltPT then splits it using one Fe3+/sum Fe for every sample, instead of keeping
+    the measured FeO/Fe2O3 split of samples that report both.
+    """
+    df = df.copy()
+    column = lambda c: pd.to_numeric(df[c], errors="coerce") if c in df else pd.Series(np.nan, index=df.index)
+    reported = column("FeO_tot")
+    from_parts = column("FeO").fillna(0) + column("Fe2O3").fillna(0) * 0.8998
+    total = reported.where(reported > 0, from_parts)
+    df["FeO_tot"], df["FeO"], df["Fe2O3"] = total, total, 0.0
+    return df
+
+
+def fractionation_correction(file_name, src_Fo=0.9, max_olivine_addition=0.4, fe3_fe_total=0.1,
+                             measured_fe3=False):
+    """Add olivine to each sample until it is in equilibrium with mantle olivine (meltPT).
+
+    fe3_fe_total is the Fe3+/sum Fe used to split total iron. By default it is applied to
+    every sample; with measured_fe3=True, samples reporting both FeO and Fe2O3 keep
+    their measured split instead.
+    """
     # Import meltPT only when a correction is requested
     from meltPT import Suite, BacktrackOlivineFractionation
+    import tempfile
 
     sample_df, file_path = get_and_check_file(file_name)
-    s = Suite(file_path, src_Fo=src_Fo)
+    if measured_fe3:
+        s = Suite(file_path, src_Fo=src_Fo, src_FeIII_totFe=fe3_fe_total)
+    else:
+        with tempfile.TemporaryDirectory() as tmp:
+            total_iron_csv = Path(tmp) / "total_iron.csv"
+            as_total_iron(pd.read_csv(file_path)).to_csv(total_iron_csv, index=False)
+            s = Suite(str(total_iron_csv), src_Fo=src_Fo, src_FeIII_totFe=fe3_fe_total)
     b = BacktrackOlivineFractionation(verbose=True, max_olivine_addition=max_olivine_addition)
     s.backtrack_compositions(backtracker=b)
     primary_composition_df = s.primary

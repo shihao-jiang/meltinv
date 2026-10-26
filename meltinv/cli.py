@@ -16,6 +16,8 @@ def main():
     parser_corr.add_argument("file_name", type=str)
     parser_corr.add_argument("--src_Fo", type=float, default=0.9)
     parser_corr.add_argument("--max_olivine_addition", type=float, default=0.5)
+    parser_corr.add_argument("--fe3_fe_total", type=float, default=0.1)
+    parser_corr.add_argument("--measured_fe3", action="store_true")
 
     # -------- invert command --------
     parser_inv = subparsers.add_parser(
@@ -27,6 +29,8 @@ def main():
     parser_inv.add_argument("--correction", action="store_true")
     parser_inv.add_argument("--src_Fo", type=float, default=0.9)
     parser_inv.add_argument("--max_olivine_addition", type=float, default=0.5)
+    parser_inv.add_argument("--fe3_fe_total", type=float, default=0.1)
+    parser_inv.add_argument("--measured_fe3", action="store_true")
     parser_inv.add_argument("--individual_sample_figures", "--make_figures", action="store_true")
     parser_inv.add_argument("--no_group_comparison_figure", dest="group_comparison_figure",
                             action="store_false")
@@ -47,7 +51,9 @@ def main():
         correction(
             args.file_name,
             src_Fo=args.src_Fo,
-            max_olivine_addition=args.max_olivine_addition
+            max_olivine_addition=args.max_olivine_addition,
+            fe3_fe_total=args.fe3_fe_total,
+            measured_fe3=args.measured_fe3
         )
 
     elif args.command == "invert":
@@ -59,6 +65,8 @@ def main():
             correction=args.correction,
             src_Fo=args.src_Fo,
             max_olivine_addition=args.max_olivine_addition,
+            fe3_fe_total=args.fe3_fe_total,
+            measured_fe3=args.measured_fe3,
             individual_sample_figures=args.individual_sample_figures,
             group_comparison_figure=args.group_comparison_figure,
             plot_archive=args.plot_archive

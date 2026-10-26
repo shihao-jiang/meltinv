@@ -468,9 +468,12 @@ def aggregate_per_sample_results(results_df):
 
 def invert_melt_condition(file_name, depleted_location=None, correction=False,
                           src_Fo=0.9, max_olivine_addition=0.4, individual_sample_figures=False,
-                          group_comparison_figure=True, *, plot_archive=None):
+                          group_comparison_figure=True, *, plot_archive=None, fe3_fe_total=0.1,
+                          measured_fe3=False):
     """Fit samples, calibrate parameters, export tables and optionally plot.
 
+    fe3_fe_total and measured_fe3 are passed to the olivine correction
+    (see fractionation_correction).
     plot_archive=None disables saving. A .zip path saves the data needed for
     regenerate_figures(), even when both plotting flags are False. Tables and
     immediate figures are written relative to the current working directory.
@@ -485,13 +488,15 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
     context = (PlotArchiveWriter(plot_archive, {
         "input_file": str(file_name), "depleted_location": depleted_location,
         "correction": correction, "src_Fo": src_Fo,
-        "max_olivine_addition": max_olivine_addition,
+        "max_olivine_addition": max_olivine_addition, "fe3_fe_total": fe3_fe_total,
+        "measured_fe3": measured_fe3,
     }) if plot_archive is not None else nullcontext())
     with context as archive:
         if correction == False:
             df = read_melt_composition(file_name)
         else:
-            df = fractionation_correction(file_name, src_Fo, max_olivine_addition)
+            df = fractionation_correction(file_name, src_Fo, max_olivine_addition, fe3_fe_total,
+                                          measured_fe3)
 
         # Treat zero, negative, infinite and non-numeric REE values as missing
         ree_variables = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',

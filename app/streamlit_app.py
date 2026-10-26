@@ -195,7 +195,8 @@ def build_command(input_name, options):
                "--plot_archive", "plot_archive.zip"]
     if options["correction"]:
         command += ["--correction", "--src_Fo", str(options["src_Fo"]),
-                    "--max_olivine_addition", str(options["max_olivine_addition"])]
+                    "--max_olivine_addition", str(options["max_olivine_addition"]),
+                    "--fe3_fe_total", str(options["fe3_fe_total"])]
     if options["depleted"]:
         command += ["--depleted", *options["depleted"]]
     if options["individual_figures"]:
@@ -245,7 +246,8 @@ def readme_text(input_name, options, log):
     ]
     if options["correction"]:
         lines += [f"  Source olivine Fo: {options['src_Fo']}",
-                  f"  Maximum olivine addition: {options['max_olivine_addition']}"]
+                  f"  Maximum olivine addition: {options['max_olivine_addition']}",
+                  f"  Fe3+/total Fe (all samples, from total iron): {options['fe3_fe_total']}"]
     lines += [
         f"  Possibly depleted locations: {', '.join(options['depleted']) or 'none'}",
         f"  Individual sample figures: {'yes' if options['individual_figures'] else 'no'}",
@@ -372,13 +374,16 @@ correction = st.checkbox(
          "Leave this off if your file already contains primary-magma compositions.")
 if oxide_problem:
     st.caption(oxide_problem)
-src_Fo, max_olivine_addition = 0.9, 0.5
+src_Fo, max_olivine_addition, fe3_fe_total = 0.9, 0.5, 0.1
 if correction:
-    a, b = st.columns(2)
+    a, b, c = st.columns(3)
     src_Fo = a.number_input("Mantle olivine Fo", 0.85, 0.95, 0.90, 0.01, format="%.2f",
                             help="Forsterite content of the mantle olivine the melts equilibrate with.")
     max_olivine_addition = b.number_input("Maximum olivine addition", 0.1, 1.0, 0.5, 0.05,
                                           format="%.2f", help="Maximum mass fraction of olivine added.")
+    fe3_fe_total = c.number_input("Fe³⁺/ΣFe", 0.0, 0.3, 0.1, 0.01, format="%.2f",
+                                  help="Used to split each sample's total iron into FeO and Fe2O3 "
+                                       "for the olivine correction.")
 
 depleted_mode = st.segmented_control(
     "Source enrichment range", ["Enriched only", "Some locations may be depleted", "All locations may be depleted"],
@@ -400,7 +405,7 @@ if too_many_for_figures:
     st.caption(f"Individual figures are available for files with up to {MAX_INDIVIDUAL_FIGURES} samples.")
 
 options = {"correction": correction, "src_Fo": src_Fo, "max_olivine_addition": max_olivine_addition,
-           "depleted": depleted, "individual_figures": individual_figures}
+           "fe3_fe_total": fe3_fe_total, "depleted": depleted, "individual_figures": individual_figures}
 
 # 4. Run -----------------------------------------------------------------------
 st.header("4. Run", divider="gray")

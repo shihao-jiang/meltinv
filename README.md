@@ -83,9 +83,11 @@ meltinv.invert(
     individual_sample_figures=False,  # 4-panel REE/misfit figure for each sample
     group_comparison_figure=True,     # comparison figure for each location
     plot_archive=None,               # optional .zip snapshot for plotting later
+    fe3_fe_total=0.1,                 # Fe3+/total Fe used to split total iron in the correction
+    measured_fe3=False,               # True: keep measured FeO/Fe2O3 where both are reported
 )
 
-meltinv.correction(file_name, src_Fo=0.9, max_olivine_addition=0.5)
+meltinv.correction(file_name, src_Fo=0.9, max_olivine_addition=0.5, fe3_fe_total=0.1, measured_fe3=False)
 ```
 
 ### Arguments
@@ -97,6 +99,8 @@ meltinv.correction(file_name, src_Fo=0.9, max_olivine_addition=0.5)
 | `correction` | `--correction` | `False` | Correct evolved samples back to primary magma before inverting (see [Step 2](#step-2-optional-fractionation-correction)). |
 | `src_Fo` | `--src_Fo` | `0.9` | Forsterite content of the mantle-source olivine. Used only by the correction. |
 | `max_olivine_addition` | `--max_olivine_addition` | `0.5` | Maximum mass fraction of olivine that may be added. Used only by the correction. |
+| `fe3_fe_total` | `--fe3_fe_total` | `0.1` | Fe³⁺/ΣFe used to split each sample's total iron into FeO and Fe2O3. Used only by the correction. |
+| `measured_fe3` | `--measured_fe3` | `False` | Keep the measured FeO/Fe2O3 split of samples that report both, and apply `fe3_fe_total` only to the others. Off by default, because reported Fe2O3 is often raised by alteration. Used only by the correction. |
 | `individual_sample_figures` | `--individual_sample_figures` | `False` | Save a 4-panel REE and misfit figure for each sample (see [Step 5](#step-5-reading-the-figures)). |
 | `group_comparison_figure` | `--no_group_comparison_figure` turns it off | `True` | Save a figure comparing the samples at each location with ≥ 3 samples (see [Step 5](#step-5-reading-the-figures)). |
 | `plot_archive` | `--plot_archive PATH.zip` | `None` | Save a plotting snapshot; does not itself draw figures. See [plotting later](#calculate-once-and-regenerate-figures-later). |
@@ -108,10 +112,11 @@ Older argument names still work: `make_figures` (`--make_figures`) means `indivi
 ### Command line
 
 ```text
-meltinv correction FILE [--src_Fo 0.9] [--max_olivine_addition 0.5]
+meltinv correction FILE [--src_Fo 0.9] [--max_olivine_addition 0.5] [--fe3_fe_total 0.1] [--measured_fe3]
 
 meltinv invert FILE [--depleted LOC [LOC ...] | --depleted all]
-                    [--correction] [--src_Fo 0.9] [--max_olivine_addition 0.5]
+                    [--correction] [--src_Fo 0.9] [--max_olivine_addition 0.5] [--fe3_fe_total 0.1]
+                    [--measured_fe3]
                     [--individual_sample_figures] [--no_group_comparison_figure]
                     [--plot_archive PATH.zip]
 
@@ -199,7 +204,10 @@ This writes `inversion_results/examples_corrected.xlsx`. The file contains:
 
 - all your original columns, with the **REE columns replaced** by primary-magma values (diluted by the added olivine, `REE × (1 − ol_added)`);
 - `ol_added`, the mass fraction of olivine added to each sample;
-- `SiO2_primary`, `TiO2_primary`, …, `P2O5_primary`, the reconstructed primary major-element composition.
+- `SiO2_primary`, `TiO2_primary`, …, `P2O5_primary`, the reconstructed primary major-element composition;
+- `correction_success`, which is `False` for samples that cannot be corrected. These are already more magnesian than a melt in equilibrium with `src_Fo` olivine, usually because they contain accumulated olivine crystals. Their REE are set to missing, so they are not inverted.
+
+Iron is treated the same way for every sample: total iron is split into FeO and Fe2O3 using `fe3_fe_total` (Fe³⁺/ΣFe = 0.1 by default). Add `measured_fe3=True` (`--measured_fe3`) to keep the measured FeO/Fe2O3 of samples that report both.
 
 > If the input is an Excel file, a `.csv` copy is also written next to it, because meltPT reads CSV.
 
@@ -262,13 +270,13 @@ For the example, the main columns look like this:
 
 | location | count | T_mean_cali (K) | T range (K) | depth_mean_cali (km) | depth range (km) | basalt_percentage | litho_thickness_ref (km) |
 |---|---|---|---|---|---|---|---|
-| Austral-Cook Islands (Atiu) | 3 | 72.5 | 69.2–75.7 | 58.9 | 55.1–62.7 | 4.0 | 86.7 |
-| Austral-Cook Islands (Mangaia) | 14 | 102.5 | 74.9–130.1 | 57.9 | 53.3–62.5 | 2.6 | 83.4 |
-| Austral-Cook Islands (Marotiri) | 1 | 114.8 | — | 62.2 | — | 2.3 | 68.3 |
-| Austral-Cook Islands (Raivavae) | 14 | 114.3 | 61.8–166.8 | 62.8 | 49.8–75.8 | 3.0 | 73.8 |
-| Austral-Cook Islands (Rapa) | 6 | 170.9 | 146.0–195.8 | 91.6 | 82.1–101.0 | 4.7 | 67.9 |
+| Austral-Cook Islands (Atiu) | 3 | 67.7 | 64.3–71.0 | 60.3 | 56.4–64.1 | 5.1 | 86.7 |
+| Austral-Cook Islands (Mangaia) | 12 | 86.4 | 66.8–106.1 | 58.7 | 54.5–62.8 | 3.5 | 83.4 |
+| Austral-Cook Islands (Marotiri) | 1 | 106.3 | — | 64.5 | — | 4.0 | 68.3 |
+| Austral-Cook Islands (Raivavae) | 13 | 104.4 | 64.5–144.2 | 62.4 | 46.7–78.1 | 3.5 | 73.8 |
+| Austral-Cook Islands (Rapa) | 6 | 159.3 | 134.1–184.5 | 91.9 | 81.3–102.5 | 6.2 | 67.9 |
 
-The ranges are the `_err_minus` to `_err_plus` columns.
+The ranges are the `_err_minus` to `_err_plus` columns. Three of the 38 samples (two from Mangaia, one from Raivavae) are not inverted: their MgO is above 19 wt%, and the olivine correction cannot be applied (see Step 2).
 
 **2. Per-sample results:** `inversion_results/examples_sample_inversion_log10.xlsx`
 
