@@ -1,0 +1,4 @@
+# Extra packages for the web app; meltinv itself is installed from the repository.
+streamlit>=1.50,<2
+# Streamlit's tables use pyarrow; versions 20 and later need NumPy 2, which meltinv does not use yet
+pyarrow<20

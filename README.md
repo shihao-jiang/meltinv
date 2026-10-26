@@ -12,6 +12,8 @@ Every sample is inverted **individually**. The results are then summarised for e
 
 > Looking for the version that fits one solution to a whole group of samples? It lives on the [`group_samples` branch](#group-inversion-the-group_samples-branch).
 
+> Prefer not to use Python? The [web app](app/README.md) runs the same analysis from a web page: upload a spreadsheet and download the results and figures.
+
 The package can be used from the **command line** or from **Python**. This README is written as a step-by-step tutorial. Work through it once with the bundled example file, then swap in your own data.
 
 ---

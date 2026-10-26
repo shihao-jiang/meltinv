@@ -1,0 +1,14 @@
+# Look of the meltinv web app. Change the colours here; no code changes are needed.
+[theme]
+base = "light"
+primaryColor = "#B5442C"              # basalt/lava red: buttons and highlights
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F3F0EA"  # warm stone grey: panels and inputs
+textColor = "#1F2328"
+font = "sans serif"
+
+[server]
+maxUploadSize = 20                    # MB; a 3,000-sample spreadsheet is well under 2 MB
+
+[browser]
+gatherUsageStats = false
