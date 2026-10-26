@@ -33,6 +33,13 @@ def main():
     # Every sample is always inverted individually; --per_sample is accepted and ignored
     parser_inv.add_argument("--per_sample", action="store_true", help=argparse.SUPPRESS)
 
+    parser_inv.add_argument("--plot_archive", help="Save diagnostics for later replotting")
+    parser_plot = subparsers.add_parser("plot", help="Regenerate figures from a saved archive")
+    parser_plot.add_argument("archive")
+    parser_plot.add_argument("--output_dir", default="inversion_figures")
+    parser_plot.add_argument("--no_individual", action="store_true")
+    parser_plot.add_argument("--no_groups", action="store_true")
+
     args = parser.parse_args()
 
     # -------- handle commands --------
@@ -53,8 +60,15 @@ def main():
             src_Fo=args.src_Fo,
             max_olivine_addition=args.max_olivine_addition,
             individual_sample_figures=args.individual_sample_figures,
-            group_comparison_figure=args.group_comparison_figure
+            group_comparison_figure=args.group_comparison_figure,
+            plot_archive=args.plot_archive
         )
+
+    elif args.command == "plot":
+        from .plot_archive import regenerate_figures
+        regenerate_figures(args.archive, args.output_dir,
+                           individual_sample_figures=not args.no_individual,
+                           group_comparison_figure=not args.no_groups)
 
 
 if __name__ == "__main__":

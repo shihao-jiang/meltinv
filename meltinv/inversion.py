@@ -1,29 +1,45 @@
+"""Numerical inversion and tabular outputs.
+
+Start at invert_melt_condition for the complete workflow: clean observations,
+fit each sample, apply post-fit calibration, then summarise by location.
+Plot rendering lives in plotting.py; plot_archive.py saves optional snapshots.
+
+Array axes: packaged REE grids are (REE, thickness, temperature); one misfit
+grid is (thickness, temperature); the full search surface is (enrichment,
+thickness, temperature). The bundled grids have 53 thickness rows and 58
+temperature columns: row p_idx is 16 + 2*p_idx km and column t_idx is
+65 + 5*t_idx K.
+
+Names that can mislead:
+- p_idx is a thickness row, not a pressure.
+- pres_mean/pres_min/pres_max hold melting depths in km; calibration divides
+  the mean depth by 33 to obtain GPa.
+- basalt_percentage is the source-enrichment parameter: positive values mix
+  primitive mantle with basalt, negative values with depleted mantle.
+- min_sample_count in the low-level search is a count per element; the public
+  workflow passes 1. It is separate from the six-usable-REE acceptance rule.
+
+T_mean, depth_mean and basalt_percentage are the uncalibrated REE fit, which the
+individual diagnostic figures show. calibration() then adjusts temperature and
+thickness without refitting; the _cali columns and group figures use those.
+"""
 import pandas as pd
 from pathlib import Path
-import matplotlib.pyplot as plt
 import importlib.resources as pkg_resources
 import numpy as np
 from .frac_correction import fractionation_correction
-from .plot_ree import plot_ree, plot_ree_range
+from .plot_archive import PlotArchiveWriter
+from ._misfit import ModelLogCache, prepare_observations, evaluate_misfit
 
-def compress_enrichment(e):
-    """Same display transform as plot_multiple_slices.py: divide negative
-    (depleted) basalt_percentage values by 100, leave enriched (>=0) as is."""
-    e = np.asarray(e, dtype=float)
-    return np.where(e < 0, e / 100, e)
-
-
-def misfit_weighted_stats(values, misfit):
-    """
-    Mean and std over all samples, weighted by 1/misfit.
-    """
-    values, misfit = np.asarray(values, dtype=float), np.asarray(misfit, dtype=float)
-    w = 1.0 / (misfit + 1e-6)
-    mean = np.average(values, weights=w)
-    std = np.sqrt(np.average((values - mean) ** 2, weights=w))
-    return mean, std
 
 def source_composition_mix(basalt_perc):
+    """Return REE concentration multipliers relative to primitive mantle.
+
+    Positive percentages mix primitive mantle with the basalt endmember;
+    negative percentages use the absolute value as the depleted-mantle fraction.
+    For example, -50 denotes equal primitive/depleted-mantle mixing. This is the
+    existing source parameterisation, separate from the later calibration.
+    """
     PM_1995 = {
         "La": 0.648, "Ce": 1.675, "Pr": 0.254, "Nd": 1.250, "Sm": 0.406, "Eu": 0.154,
         "Gd": 0.544, "Tb": 0.099, "Dy": 0.674, "Ho": 0.149, "Er": 0.438, "Tm": 0.068,
@@ -118,6 +134,12 @@ def apply_mixing(concentrations, ree_variables, dict_mix):
     return scaled
 
 def load_all_grids():
+    """Load packaged forward-model arrays, without interpolation or refitting.
+
+    REE concentration arrays are ordered (element, thickness, temperature).
+    The remaining summary arrays are ordered (thickness, temperature).
+    Concentrations are in ppm; the legacy pres_* arrays are melting depths in km.
+    """
     ree_variables = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
                      'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu']
 
@@ -182,54 +204,11 @@ def compute_total_ree_misfit(df, mask, scale_val, grids, min_sample_count=2):
     (N residuals, 3 fitted parameters). Model cells with a missing or non-positive prediction
     for any measured element are excluded (NaN).
     """
-    ree_variables = grids["ree_variables"]
-    simulation = grids["simulation"]
+    observations = prepare_observations(df, mask, grids["ree_variables"], min_sample_count)
+    logs, valid, factors = ModelLogCache(grids, source_composition_mix).get(scale_val)
+    misfit, threshold, index = evaluate_misfit(observations, logs, valid)
+    return misfit, threshold, index, factors if misfit is not None else None
 
-    # Apply enrichment scaling
-    dict_mix = source_composition_mix(scale_val)
-    simulation_scaled = apply_mixing(simulation, ree_variables, dict_mix)
-
-    valid_mask = np.ones_like(simulation_scaled[0], dtype=bool)
-
-    # Root-mean-square log10 residual over all usable REE values, corrected for the
-    # 3 fitted parameters (T, h, enrichment): sqrt( sum of squared residuals / (N - 3) )
-    total_sq_grid = np.zeros_like(simulation_scaled[0], dtype=float)
-    num_residuals = 0
-    num_ree_valid = 0
-
-    for i, ree in enumerate(ree_variables):
-        c_sample = pd.to_numeric(df.loc[mask, ree], errors="coerce").to_numpy(dtype=float)
-        c_sample = c_sample[np.isfinite(c_sample) & (c_sample > 0)]
-
-        if len(c_sample) < min_sample_count:
-            continue
-
-        # Only model cells with a finite, positive prediction for this element can be fitted
-        model = simulation_scaled[i]
-        usable = np.isfinite(model) & (model > 0)
-        valid_mask &= usable
-
-        for c_l in c_sample:
-            total_sq_grid[usable] += (np.log10(model[usable]) - np.log10(c_l)) ** 2
-            num_residuals += 1
-
-        num_ree_valid += 1
-
-    degrees_of_freedom = num_residuals - 3
-    if num_ree_valid == 0 or degrees_of_freedom <= 0:
-        return None, None, None, None
-
-    total_misfit_grid = np.where(valid_mask, np.sqrt(total_sq_grid / degrees_of_freedom), np.nan)
-
-    if not valid_mask.any():
-        return total_misfit_grid, None, None, dict_mix
-
-    # The best fit is the global minimum (an exact match with zero misfit included);
-    # the 10th-percentile threshold is kept for reference only
-    threshold = np.percentile(total_misfit_grid[valid_mask], 10)
-    min_idx = np.unravel_index(np.nanargmin(total_misfit_grid), total_misfit_grid.shape)
-
-    return total_misfit_grid, threshold, min_idx, dict_mix
 
 def get_enrichment_values(location, depleted_locations):
     """
@@ -258,10 +237,39 @@ def get_enrichment_values(location, depleted_locations):
         return default_range
 
 
-def invert_single_group(df, location, count, grids, test_enrichment_values, min_sample_count=2):
+def invert_single_group(df, location, count, grids, test_enrichment_values, min_sample_count=2,
+                        *, retain_diagnostics=True, model_cache=None):
     """
-    Perform inversion for a single volcanic location group.
-    Return the best inversion result for this group.
+    Search the temperature/thickness/enrichment grid for the selected rows.
+
+    The name is retained for compatibility. The public workflow gives each
+    sample its own location label, so this function normally fits one sample.
+    Return None if no valid fit exists, otherwise the dictionary below.
+    No calibration is applied here; the caller does that.
+
+    retain_diagnostics preserves full misfit surfaces for plotting; turn it off
+    for tabular results only. A run-local model_cache reuses log predictions
+    across samples. Equal minima retain the first enrichment and row-major cell.
+
+    Result fields:
+    - min_idx, basalt_idx: best (thickness row, temperature column) and
+      enrichment index.
+    - T_mean, depth_mean, basalt_percentage: uncalibrated excess temperature (K),
+      lithospheric thickness (km) and source enrichment.
+    - pres_*, F_*, M_*: melting depth (km), melt fraction and melting rate
+      summaries at the best cell, from the packaged forward grids.
+    - misfit_value, global_min_value: the same exhaustive-search minimum; both
+      names are kept for compatibility.
+    - global_flat_index: best cell in (enrichment, thickness, temperature) order.
+    - ratio_of_local_global_misfit: compatibility field, always 1.
+    - mean_ree, low_ree, high_ree: source-scaled model REE and its forward-model
+      min/max envelope (ppm), not statistical confidence limits.
+    - mean_ree_global: same as mean_ree, kept for the plot interface.
+    - misfit_grid: (thickness, temperature) slice at the best enrichment.
+    - full_3d_grids: complete surface if retain_diagnostics, otherwise None.
+    - enrichment_values: ordered search values (irregular on the depleted side).
+    - threshold: legacy tenth-percentile diagnostic or None; not a filter.
+    - litho_thickness_ref: optional independent thickness, never used in the fit.
     """
     ree_variables = grids["ree_variables"]
     simulation_concentrations = grids["simulation"]
@@ -289,18 +297,18 @@ def invert_single_group(df, location, count, grids, test_enrichment_values, min_
     }
 
     full_3d_grids = []
+    observations = prepare_observations(df, mask, ree_variables, min_sample_count)
+    if model_cache is None:
+        model_cache = ModelLogCache(grids, source_composition_mix)
 
     for scale_val in test_enrichment_values:
 
-        total_misfit_grid, threshold, min_idx, dict_mix = compute_total_ree_misfit(
-            df=df,
-            mask=mask,
-            scale_val=scale_val,
-            grids=grids,
-            min_sample_count=min_sample_count
-        )
+        logs, valid, dict_mix = model_cache.get(scale_val)
+        total_misfit_grid, threshold, min_idx = evaluate_misfit(
+            observations, logs, valid, diagnostic_threshold=retain_diagnostics)
 
-        full_3d_grids.append(total_misfit_grid)
+        if retain_diagnostics:
+            full_3d_grids.append(total_misfit_grid)
 
         if min_idx is not None:
             global_min_value = total_misfit_grid[min_idx]
@@ -319,7 +327,8 @@ def invert_single_group(df, location, count, grids, test_enrichment_values, min_
                 "threshold": threshold,
             })
 
-    # Convert best index to physical values
+    # Rows represent lithospheric thickness; columns represent excess temperature.
+    # The legacy p_idx name denotes a thickness row, not pressure in GPa.
     if best_result["min_idx"] is None:
         return None
 
@@ -328,10 +337,11 @@ def invert_single_group(df, location, count, grids, test_enrichment_values, min_
     low_ree = [arr[p_idx, t_idx] for arr in lower_bound_concentrations]
     high_ree = [arr[p_idx, t_idx] for arr in upper_bound_concentrations]
 
-    global_flat_index = np.nanargmin(full_3d_grids)
-    e_gl, p_gl, t_gl = np.unravel_index(global_flat_index, np.array(full_3d_grids).shape)
-    mean_ree_global = [arr[p_gl, t_gl] for arr in simulation_concentrations]
-    dict_mix_global = source_composition_mix(test_enrichment_values[e_gl])
+    # The running minimum already is the global minimum of the exhaustive search.
+    # Strict '<' above preserves the same first-tie selection as np.nanargmin.
+    e_gl = test_enrichment_values.index(best_result["scale"])
+    global_flat_index = np.ravel_multi_index(
+        (e_gl, p_idx, t_idx), (len(test_enrichment_values), *simulation_concentrations.shape[1:]))
 
     for i, ree in enumerate(ree_variables):
         factor = best_result["scaling_factors"][ree]
@@ -339,12 +349,8 @@ def invert_single_group(df, location, count, grids, test_enrichment_values, min_
         low_ree[i] = factor * low_ree[i]
         high_ree[i] = factor * high_ree[i]
 
-    for i, ree in enumerate(ree_variables):
-        factor = dict_mix_global[ree]
-        mean_ree_global[i] = factor * mean_ree_global[i]
-
     return {
-        "full_3d_grids": np.array(full_3d_grids),
+        "full_3d_grids": np.array(full_3d_grids) if retain_diagnostics else None,
         "min_idx": best_result["min_idx"],
         "T_mean": 65 + t_idx * 5,
         "depth_mean": 15 + p_idx * 2 + 1,
@@ -361,11 +367,10 @@ def invert_single_group(df, location, count, grids, test_enrichment_values, min_
         "basalt_idx": test_enrichment_values.index(best_result["scale"]),
         "enrichment_values": test_enrichment_values,
         "misfit_value": best_result["min_misfit_value"],
-        "global_min_value": np.nanmin(full_3d_grids),
+        "global_min_value": best_result["min_misfit_value"],
         "global_flat_index": global_flat_index,
-        "mean_ree_global": mean_ree_global,
-        "ratio_of_local_global_misfit": (1.0 if np.nanmin(full_3d_grids) == 0 else
-                                         best_result["min_misfit_value"] / np.nanmin(full_3d_grids)),
+        "mean_ree_global": mean_ree.copy(),
+        "ratio_of_local_global_misfit": 1.0,
         "misfit_grid": best_result["misfit_grid"],
         "threshold": best_result["threshold"],
         "mean_ree": mean_ree,
@@ -380,164 +385,14 @@ def remove_keys(d, keys):
         keys = [keys]
     return {k: v for k, v in new_d.items() if k not in keys}
 
-def enrichment_ticks(enrichment_values):
-    """Tick positions/labels for the (possibly non-uniformly spaced) enrichment
-    axis: nearest grid index to a set of round target values."""
-    ev = np.asarray(enrichment_values, dtype=float)
-    targets = [-100, -50, 0, 5, 10, 15] if ev.min() < 0 else [0, 3, 6, 9, 12, 15]
-    ticks = sorted({int(np.abs(ev - t).argmin()) for t in targets})
-    return ticks, [f"{ev[i]:g}" for i in ticks]
-
-def plot_results(df, location, count, result):
-    fig, axs = plt.subplots(2, 2, figsize=(9, 7.35), layout='constrained')
-
-    # Plot on left panel
-    ax = axs[0, 0]
-
-    if result["min_idx"] is None:
-        return
-    else:
-        p_idx, t_idx = result["min_idx"]
-        min_value = result["misfit_value"]
-        full_3d_grid = result["full_3d_grids"]
-        global_min_value = result["global_min_value"]
-        global_flat_index = result["global_flat_index"]
-        e_i, p_i, t_i = np.unravel_index(global_flat_index, full_3d_grid.shape)
-        basalt_idx = result["basalt_idx"]
-        enrichment_values = np.asarray(result["enrichment_values"], dtype=float)
-
-    ree_variables = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
-                     'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu']
-
-    mask = df["location"] == location
-    sample_values = df[ree_variables][mask].to_numpy()
-
-    flag = 0
-    for i in sample_values:
-        if flag == 0:
-            plot_ree(ax, i, 'k', 2, label='Sample')
-            flag = 1
-        else:
-            plot_ree(ax, i, 'k', 2, label=None)
-
-    plot_ree(ax, result["mean_ree_global"], 'orange', 2, label='Global Best Fit')
-    plot_ree(ax, result["mean_ree"], 'red', 2, label='Best Fit')
-    plot_ree_range(ax, result["mean_ree"], result["low_ree"], result["high_ree"])
-
-    ax.legend(loc='lower left')
-
-    inv_temp = int(result["T_mean"])
-    inv_thickness = int(result["depth_mean"])
-    inv_basalt = result["basalt_percentage"]
-    ax.text(0.99, 0.987, f"{location}", ha='right', va='top', fontweight='bold', transform=ax.transAxes)
-    ax.text(0.99, 0.93, f'Temperature = {inv_temp} K\nThickness = {inv_thickness} km'
-                        f'\nEnrichment Factor = {inv_basalt:.1f}', transform=ax.transAxes, ha='right', va='top', multialignment='right')
-
-    # Plot on left panel
-    ax = axs[0, 1]
-    plot_scale = min_value if min_value > 0 else 1.0
-    misfit_label = "misfit / minimum misfit" if min_value > 0 else "absolute log10 misfit (exact best fit)"
-    best_misfit_grid = result["misfit_grid"] / plot_scale
-
-    litho_thickness_ref = result["litho_thickness_ref"]
-    basalt_percentage = result["basalt_percentage"]
-
-    masked_grid = np.ma.masked_where((best_misfit_grid < 0) | np.isnan(best_misfit_grid), best_misfit_grid)
-    # Set colormap with masked color as white
-    cmap = plt.colormaps.get_cmap('viridis').copy()
-    cmap.set_bad(color='white')
-    # Plot masked grid
-    im = ax.imshow(masked_grid, cmap=cmap)
-    cbar = fig.colorbar(im, ax=ax, label=misfit_label)
-    cbar.ax.yaxis.set_major_formatter('{:.1f}'.format)
-
-    # Set limits to match data
-    nx = 58
-    ny = 53
-    ax.set_xlim(0, nx)
-    ax.set_ylim(ny, 0)
-
-    x_ticks = np.arange(0, nx, 10)
-    x_labels = 65 + 5 * x_ticks
-    ax.set_xticks(ticks=x_ticks, labels=x_labels)
-
-    y_ticks = np.arange(0, ny, 10)
-    y_labels = 16 + 2 * y_ticks
-    ax.set_yticks(ticks=y_ticks, labels=y_labels)
-
-    ax.set_xlabel('Excess Temperature (K)')
-    ax.set_ylabel('Lithospheric thickness (km)')
-
-    # Find min positive L2 norm value and its location
-    ax.plot(t_i, p_i, marker='o', color='orange', markersize=10)
-    ax.plot(t_idx, p_idx, marker='*', color='red', markersize=10)
-
-    # Contour for lowest 3% (excluding 0 and NaN)
-    levels = [1.1, 1.3, 1.5, 2, 2.5, 3, 5]
-    cs = ax.contour(best_misfit_grid, levels=levels, colors='white', linewidths=1.2)
-    ax.clabel(cs, inline=True, fontsize=8, fmt='%1.1f')
-    if litho_thickness_ref is not None:
-        ax.axhline((litho_thickness_ref - 16) / 2, color='black', linestyle='--')
-
-    ratio_of_local_global_misfit = result["ratio_of_local_global_misfit"]
-
-    ax.text(0.02, 0.95, f"Ratio to Global Min Misfit = {ratio_of_local_global_misfit:.1f}", transform=ax.transAxes)
-
-    ax = axs[1, 0]
-    best_misfit_grid = full_3d_grid[:, p_idx, :] / plot_scale
-    masked_grid = np.ma.masked_where((best_misfit_grid < 0) | np.isnan(best_misfit_grid), best_misfit_grid)
-
-    im = ax.imshow(masked_grid, cmap=cmap, aspect='auto')
-    ax.set_xlim(0, nx)
-    x_ticks = np.arange(0, nx, 10)
-    x_labels = 65 + 5 * x_ticks
-    ax.set_xticks(ticks=x_ticks, labels=x_labels)
-    ax.set_xlabel('Excess Temperature (K)')
-
-    y_ticks, y_labels = enrichment_ticks(enrichment_values)
-    ax.set_yticks(ticks=y_ticks, labels=y_labels)
-    ax.plot(t_i, e_i, marker='o', color='orange', markersize=10)
-    ax.plot(t_idx, basalt_idx, marker='*', color='red', markersize=10)
-
-    ax.set_ylabel('Relative Enrichment')
-
-    cs = ax.contour(best_misfit_grid, levels=levels, colors='white', linewidths=1.2)
-    ax.clabel(cs, inline=True, fontsize=8, fmt='%1.1f')
-
-    ax = axs[1, 1]
-    best_misfit_grid = full_3d_grid[:, :, t_idx] / plot_scale
-    masked_grid = np.ma.masked_where((best_misfit_grid < 0) | np.isnan(best_misfit_grid), best_misfit_grid)
-    im = ax.imshow(masked_grid, cmap=cmap, aspect='auto')
-    ax.set_xlim(0, ny)
-
-    x_ticks = np.arange(0, ny, 10)
-    x_labels = 16 + 2 * x_ticks
-    ax.set_xticks(ticks=x_ticks, labels=x_labels)
-    ax.set_xlabel('Lithospheric thickness (km)')
-
-    y_ticks, y_labels = enrichment_ticks(enrichment_values)
-    ax.set_yticks(ticks=y_ticks, labels=y_labels)
-    ax.plot(p_i, e_i, marker='o', color='orange', markersize=10)
-    ax.plot(p_idx, basalt_idx, marker='*', color='red', markersize=10)
-
-    if litho_thickness_ref is not None:
-        ax.axvline((litho_thickness_ref - 16) / 2, color='black', linestyle='--')
-
-    ax.set_ylabel('Relative Enrichment')
-
-    cs = ax.contour(best_misfit_grid, levels=levels, colors='white', linewidths=1.2)
-    ax.clabel(cs, inline=True, fontsize=8, fmt='%1.1f')
-
-    results_dir = Path("inversion_figures")
-    results_dir.mkdir(exist_ok=True)
-
-    output_file = results_dir / f"ree_comparison_{location}_log10_N{count}.png"
-
-    plt.savefig(output_file, dpi=300, bbox_inches='tight')
-    print(f"Figure saved to: {output_file.resolve()}")
-    plt.close(fig)
 
 def calibration(T, P, h, b):
+    """Apply the existing post-inversion solidus-offset prescription.
+
+    T: plume excess temperature (K); P: mean melting *depth* (km, divided by
+    33 to obtain GPa); h: lithospheric thickness (km); b: enrichment percent.
+    Return adjusted (temperature K, thickness km). This does not refit REEs.
+    """
     T = np.array(T)
     P = np.array(P) / 33
     b = np.clip(np.array(b, dtype=float), 0, 100)
@@ -611,177 +466,153 @@ def aggregate_per_sample_results(results_df):
     return pd.DataFrame(rows)
 
 
-def plot_group_comparison(results_df, min_count_for_std=3):
-    """
-    Plot one figure per location comparing its per-sample temperature,
-    thickness and enrichment results. The histograms show the 1/misfit-weighted mean,
-    and the ±1 std band only for locations with at least min_count_for_std samples.
-    """
-    results_dir = Path("inversion_figures")
-    results_dir.mkdir(exist_ok=True)
-
-    for location, group in results_df.groupby("location"):
-        group_number = len(group)
-        show_std = group_number >= min_count_for_std
-
-        thickness = group["depth_mean_cali"].to_numpy(dtype=float)
-        temperature = group["T_mean_cali"].to_numpy(dtype=float)
-        enrichment = compress_enrichment(group["basalt_percentage"])
-        misfit = group["misfit_value"].to_numpy(dtype=float)
-        misfit_kwargs = dict(c=misfit * 100, cmap="Blues_r", vmin=0.0, vmax=3, edgecolors="k")
-        label_size = 8
-
-        fig, axs = plt.subplots(2, 2, figsize=(9, 7))
-
-        ax = axs[0, 0]
-        ax.scatter(temperature, thickness, **misfit_kwargs)
-        ax.set_ylabel("Lithospheric Thickness (km)")
-        ax.set_xlabel("Excess Temperature (K)")
-        ax.set_ylim(15, 130)
-        ax.set_xlim(50, 300)
-        ax.text(0.02, 0.97, "(a)", transform=ax.transAxes, va="top", ha="left")
-
-        ax = axs[0, 1]
-        sc = ax.scatter(enrichment, thickness, **misfit_kwargs)
-        ax.set_ylabel("Thickness (km)")
-        ax.set_xlabel("Relative Enrichment")
-        ax.set_ylim(15, 130)
-        ax.set_xlim(-1.2, 16)
-        cbar = fig.colorbar(sc, ax=ax)
-        cbar.ax.tick_params(labelsize=label_size)
-        cbar.set_ticks(np.linspace(0, 3, 7))
-        cbar.set_label(r"Misfit (×10$^{-2}$)", fontsize=label_size)
-        ax.text(0.02, 0.97, "(b)", transform=ax.transAxes, va="top", ha="left")
-
-        ax = axs[1, 0]
-        ax.scatter(temperature, enrichment, **misfit_kwargs)
-        ax.set_ylabel("Relative Enrichment")
-        ax.set_xlabel("Excess Temperature (K)")
-        ax.set_ylim(-1.2, 16)
-        ax.set_xlim(50, 300)
-        ax.text(0.02, 0.97, "(c)", transform=ax.transAxes, va="top", ha="left")
-
-        subspec = axs[1, 1].get_subplotspec()
-        axs[1, 1].remove()
-        gs_sub = subspec.subgridspec(3, 1, hspace=0.7)
-
-        histograms = [
-            (temperature, np.linspace(50, 300, 26), "orange", (50, 300), "(d-1) Excess Temperature (K)"),
-            (thickness, np.linspace(15, 130, 26), "steelblue", (15, 130), "(d-2) Lithospheric Thickness (km)"),
-            (enrichment, np.linspace(-1., 16, 18), "seagreen", (-1.2, 16), "(d-3) Relative Enrichment"),
-        ]
-        for i, (values, bins, color, xlim, title) in enumerate(histograms):
-            mean, std = misfit_weighted_stats(values, misfit)
-            ax = fig.add_subplot(gs_sub[i])
-            ax.tick_params(axis="both", labelsize=label_size)
-            ax.hist(values, bins=bins, color=color, edgecolor="black")
-            if show_std:
-                ax.axvspan(mean - std, mean + std, color="black", alpha=0.15)
-            ax.axvline(mean, color="black", linestyle="--", linewidth=1.5)
-            ax.set_xlim(*xlim)
-            ax.text(0.0, 1.02, title, transform=ax.transAxes,
-                    va="bottom", ha="left", fontsize=label_size + 1)
-
-        fig.suptitle(f"{location} (N={group_number})")
-        fig.tight_layout(pad=0.5, w_pad=0.3, h_pad=0.3)
-
-        output_file = results_dir / f"group_comparison_{location}_N{group_number}.png"
-        plt.savefig(output_file, dpi=350)
-        print(f"Figure saved to: {output_file.resolve()}")
-        plt.close(fig)
-
-
 def invert_melt_condition(file_name, depleted_location=None, correction=False,
                           src_Fo=0.9, max_olivine_addition=0.4, individual_sample_figures=False,
-                          group_comparison_figure=True):
-    if correction == False:
-        df = read_melt_composition(file_name)
-    else:
-        df = fractionation_correction(file_name, src_Fo, max_olivine_addition)
+                          group_comparison_figure=True, *, plot_archive=None):
+    """Fit samples, calibrate parameters, export tables and optionally plot.
 
-    # Treat zero, negative, infinite and non-numeric REE values as missing
-    ree_variables = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
-                     'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu']
-    df = df.copy()
-    for ree in ree_variables:
-        values = pd.to_numeric(df[ree], errors='coerce')
-        df[ree] = values.where(np.isfinite(values) & (values > 0))
+    plot_archive=None disables saving. A .zip path saves the data needed for
+    regenerate_figures(), even when both plotting flags are False. Tables and
+    immediate figures are written relative to the current working directory.
+    Return the per-sample DataFrame in input order, excluding unfittable samples.
+    """
+    from contextlib import nullcontext
+    if plot_archive is not None:
+        if Path(plot_archive).expanduser().resolve() == Path(file_name).expanduser().resolve():
+            raise ValueError("plot_archive must not overwrite the input data file")
+        if Path(plot_archive).suffix.lower() != '.zip':
+            raise ValueError("plot_archive must have a .zip extension, e.g. 'run.zip'")
+    context = (PlotArchiveWriter(plot_archive, {
+        "input_file": str(file_name), "depleted_location": depleted_location,
+        "correction": correction, "src_Fo": src_Fo,
+        "max_olivine_addition": max_olivine_addition,
+    }) if plot_archive is not None else nullcontext())
+    with context as archive:
+        if correction == False:
+            df = read_melt_composition(file_name)
+        else:
+            df = fractionation_correction(file_name, src_Fo, max_olivine_addition)
 
-    if df["location"].isna().any() or df["location"].astype(str).str.strip().eq("").any():
-        raise ValueError("Every sample must have a non-empty location")
+        # Treat zero, negative, infinite and non-numeric REE values as missing
+        ree_variables = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
+                         'Tb', 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu']
+        df = df.copy()
+        for ree in ree_variables:
+            values = pd.to_numeric(df[ree], errors='coerce')
+            df[ree] = values.where(np.isfinite(values) & (values > 0))
 
-    # Invert every sample on its own: give each sample a unique location label
-    sample_number = df.groupby("location").cumcount() + 1
-    original_location = df["location"]
-    original_position = range(len(df))
-    df["location"] = original_location.astype(str) + "__sample" + sample_number.astype(str)
-    location_map = dict(zip(df["location"], zip(original_location, sample_number, original_position)))
+        if df["location"].isna().any() or df["location"].astype(str).str.strip().eq("").any():
+            raise ValueError("Every sample must have a non-empty location")
 
-    # Skip samples with fewer than min_ree usable REE values
-    min_ree = 6
-    ree_count = df[ree_variables].notna().sum(axis=1)
-    for label, n_ree in zip(df.loc[ree_count < min_ree, "location"], ree_count[ree_count < min_ree]):
-        location, number, _ = location_map[label]
-        print(f"Skipping {location} sample {number}: {n_ree} usable REE value(s), at least {min_ree} needed.")
-    df = df[ree_count >= min_ree]
-    if df.empty:
-        raise ValueError(f"No sample has at least {min_ree} usable REE values, so nothing can be inverted.")
+        # Invert every sample on its own: give each sample a unique location label
+        sample_number = df.groupby("location").cumcount() + 1
+        original_location = df["location"]
+        original_position = range(len(df))
+        df["location"] = original_location.astype(str) + "__sample" + sample_number.astype(str)
+        location_map = dict(zip(df["location"], zip(original_location, sample_number, original_position)))
 
-    group_list = build_group_list(df, min_count=1)
-    grids = load_all_grids()
-    results = []
-    for g_i, group in enumerate(group_list):
-        location, count = group
-        test_enrichment_values = get_enrichment_values(location, depleted_location)
-        result = invert_single_group(df, location, count, grids, test_enrichment_values,
-                                     min_sample_count=1)
+        # Skip samples with fewer than min_ree usable REE values
+        min_ree = 6
+        ree_count = df[ree_variables].notna().sum(axis=1)
+        for label, n_ree in zip(df.loc[ree_count < min_ree, "location"], ree_count[ree_count < min_ree]):
+            location, number, _ = location_map[label]
+            print(f"Skipping {location} sample {number}: {n_ree} usable REE value(s), at least {min_ree} needed.")
+        df = df[ree_count >= min_ree]
+        if df.empty:
+            raise ValueError(f"No sample has at least {min_ree} usable REE values, so nothing can be inverted.")
 
-        if result is not None:
-            result["location"] = location
-            result["count"] = count
+        group_list = build_group_list(df, min_count=1)
+        grids = load_all_grids()
+        model_cache = ModelLogCache(grids, source_composition_mix)
+        results = []
+        for location, count in group_list:
+            test_enrichment_values = get_enrichment_values(location, depleted_location)
+            result = invert_single_group(df, location, count, grids, test_enrichment_values,
+                                         min_sample_count=1, model_cache=model_cache,
+                                         retain_diagnostics=individual_sample_figures or plot_archive is not None)
 
-            keys_to_be_removed = ["full_3d_grids", "misfit_grid", "threshold", "scaling_factors",
-                                  "mean_ree", "mean_ree_global", "low_ree", "high_ree", "min_idx", "global_flat_index",
-                                  "basalt_idx", "enrichment_values"]
-            results.append(remove_keys(result, keys_to_be_removed))
+            if result is not None:
+                result["location"] = location
+                result["count"] = count
 
-            if individual_sample_figures:
-                plot_results(df, location, count, result)
+                keys_to_be_removed = ["full_3d_grids", "misfit_grid", "threshold", "scaling_factors",
+                                      "mean_ree", "mean_ree_global", "low_ree", "high_ree", "min_idx", "global_flat_index",
+                                      "basalt_idx", "enrichment_values"]
+                results.append(remove_keys(result, keys_to_be_removed))
 
-    if not results:
-        raise ValueError("No valid model cell could be fitted to the supplied samples")
-    results = pd.DataFrame(results)
+                if archive is not None:
+                    archive.add_sample(df, location, count, result)
+                if individual_sample_figures:
+                    from .plotting import plot_results
+                    plot_results(df, location, count, result)
+                # Release this sample's large surface before starting the next search.
+                del result
 
-    results["sample_number"] = results["location"].map(lambda x: location_map[x][1])
-    results["_original_position"] = results["location"].map(lambda x: location_map[x][2])
-    results["location"] = results["location"].map(lambda x: location_map[x][0])
-    results = results.sort_values("_original_position").drop(columns="_original_position").reset_index(drop=True)
+        if not results:
+            raise ValueError("No valid model cell could be fitted to the supplied samples")
+        results = pd.DataFrame(results)
 
-    T_mean = results['T_mean']
-    P_mean = results['pres_mean']
-    depth_mean = results['depth_mean']
-    basalt_perc = results['basalt_percentage']
+        results["sample_number"] = results["location"].map(lambda x: location_map[x][1])
+        results["_original_position"] = results["location"].map(lambda x: location_map[x][2])
+        results["location"] = results["location"].map(lambda x: location_map[x][0])
+        results = results.sort_values("_original_position").drop(columns="_original_position").reset_index(drop=True)
 
-    T_cali, h_cali = calibration(T_mean, P_mean, depth_mean, basalt_perc)
+        T_mean = results['T_mean']
+        P_mean = results['pres_mean']
+        depth_mean = results['depth_mean']
+        basalt_perc = results['basalt_percentage']
 
-    results.insert(results.columns.get_loc('T_mean') + 1, 'T_mean_cali', T_cali)
-    results.insert(results.columns.get_loc('depth_mean') + 1, 'depth_mean_cali', h_cali)
+        T_cali, h_cali = calibration(T_mean, P_mean, depth_mean, basalt_perc)
 
-    # Shift melting pressures by the same amount as the calibrated depth
-    for col in ['pres_mean', 'pres_min', 'pres_max']:
-        results[col] = results[col] + (h_cali - depth_mean)
-    results = results.rename(columns={'pres_mean': 'pres_mean_cali', 'pres_min': 'pres_min_cali',
-                                      'pres_max': 'pres_max_cali'})
-    summary_df = pd.DataFrame(results)
+        results.insert(results.columns.get_loc('T_mean') + 1, 'T_mean_cali', T_cali)
+        results.insert(results.columns.get_loc('depth_mean') + 1, 'depth_mean_cali', h_cali)
 
-    save_results(file_name, summary_df, suffix="_sample_inversion_log10.xlsx")
-    island_summary = aggregate_per_sample_results(summary_df)
-    save_results(file_name, island_summary, suffix="_sample_inversion_summary_log10.xlsx")
-    if group_comparison_figure:
-        plot_group_comparison(summary_df)
+        # Shift melting pressures by the same amount as the calibrated depth
+        for col in ['pres_mean', 'pres_min', 'pres_max']:
+            results[col] = results[col] + (h_cali - depth_mean)
+        results = results.rename(columns={'pres_mean': 'pres_mean_cali', 'pres_min': 'pres_min_cali',
+                                          'pres_max': 'pres_max_cali'})
+        summary_df = pd.DataFrame(results)
 
-    return summary_df
+        save_results(file_name, summary_df, suffix="_sample_inversion_log10.xlsx")
+        island_summary = aggregate_per_sample_results(summary_df)
+        save_results(file_name, island_summary, suffix="_sample_inversion_summary_log10.xlsx")
+        if archive is not None:
+            archive.add_summary(summary_df)
+        if group_comparison_figure:
+            from .plotting import plot_group_comparison
+            plot_group_comparison(summary_df)
+
+        return summary_df
 
 
+# Explicit compatibility wrappers keep old notebook imports working without
+# importing Matplotlib during a numerical-only run. New code can use plotting.py.
+def plot_results(df, location, count, result, output_dir="inversion_figures"):
+    """Compatibility wrapper for meltinv.plotting.plot_results."""
+    from .plotting import plot_results as render
+    return render(df, location, count, result, output_dir)
 
 
+def plot_group_comparison(results_df, min_count_for_std=3, output_dir="inversion_figures"):
+    """Compatibility wrapper for meltinv.plotting.plot_group_comparison."""
+    from .plotting import plot_group_comparison as render
+    return render(results_df, min_count_for_std, output_dir)
+
+
+def compress_enrichment(e):
+    """Compatibility wrapper for the plot-only enrichment transformation."""
+    from .plotting import compress_enrichment as transform
+    return transform(e)
+
+
+def enrichment_ticks(enrichment_values):
+    """Compatibility wrapper for enrichment-axis tick labels."""
+    from .plotting import enrichment_ticks as ticks
+    return ticks(enrichment_values)
+
+
+def misfit_weighted_stats(values, misfit):
+    """Compatibility wrapper for the plotted weighted mean and spread."""
+    from .plotting import misfit_weighted_stats as stats
+    return stats(values, misfit)
