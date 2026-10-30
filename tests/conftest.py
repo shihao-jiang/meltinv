@@ -34,7 +34,7 @@ def grid_sample(grids):
         row, col = valid[k]
         mix = source_composition_mix(enrichment)
         values = {r: grids["simulation"][i, row, col] * mix[r] for i, r in enumerate(REE)}
-        return {"location": location, **values}, 65 + 5 * col, 16 + 2 * row
+        return {"location": location, **values}, 67.5 + 5 * col, 16 + 2 * row
 
     return make
 

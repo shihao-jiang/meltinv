@@ -7,8 +7,8 @@ Plot rendering lives in plotting.py; plot_archive.py saves optional snapshots.
 Array axes: packaged REE grids are (REE, thickness, temperature); one misfit
 grid is (thickness, temperature); the full search surface is (enrichment,
 thickness, temperature). The bundled grids have 53 thickness rows and 58
-temperature columns: row p_idx is 16 + 2*p_idx km and column t_idx is
-65 + 5*t_idx K.
+temperature columns, reported at cell centres: row p_idx is 16 + 2*p_idx km and
+column t_idx is 67.5 + 5*t_idx K.
 
 Names that can mislead:
 - p_idx is a thickness row, not a pressure.
@@ -352,7 +352,7 @@ def invert_single_group(df, location, count, grids, test_enrichment_values, min_
     return {
         "full_3d_grids": np.array(full_3d_grids) if retain_diagnostics else None,
         "min_idx": best_result["min_idx"],
-        "T_mean": 65 + t_idx * 5,
+        "T_mean": 67.5 + t_idx * 5,
         "depth_mean": 15 + p_idx * 2 + 1,
         "pres_mean": average_pres_grid[p_idx, t_idx],
         "pres_min": average_pres_min_grid[p_idx, t_idx],

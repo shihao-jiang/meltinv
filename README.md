@@ -447,7 +447,7 @@ The individual diagnostic figures show the **uncalibrated** fit from step 4 (`T_
 
 Some names are historical and can mislead:
 
-- `p_idx` is a lithospheric-thickness row (`16 + 2 × p_idx` km), not a pressure; `t_idx` is a temperature column (`65 + 5 × t_idx` K).
+- `p_idx` is a lithospheric-thickness row (`16 + 2 × p_idx` km), not a pressure; `t_idx` is a temperature column (`67.5 + 5 × t_idx` K); both are cell centres.
 - `pres_mean`, `pres_min` and `pres_max` (and their `_cali` versions) are melting **depths in km**. Calibration divides the mean depth by 33 to get GPa.
 - `basalt_percentage` is the source-enrichment parameter: positive values mix primitive mantle with basalt, negative values with depleted mantle.
 - `global_min_value` always equals `misfit_value`, and `ratio_of_local_global_misfit` is always 1. Both are kept so the output columns do not change.

@@ -107,13 +107,13 @@ def plot_results(df, location, count, result, output_dir="inversion_figures"):
     cbar = fig.colorbar(im, ax=ax, label=misfit_label)
     cbar.ax.yaxis.set_major_formatter('{:.1f}'.format)
 
-    # Grid columns are 5 K apart from 65 K; rows are 2 km apart from 16 km.
+    # Cell centres: columns are 5 K apart from 67.5 K; rows are 2 km apart from 16 km.
     ny, nx = result["misfit_grid"].shape
     ax.set_xlim(0, nx)
     ax.set_ylim(ny, 0)
 
     x_ticks = np.arange(0, nx, 10)
-    x_labels = 65 + 5 * x_ticks
+    x_labels = 67.5 + 5 * x_ticks
     ax.set_xticks(ticks=x_ticks, labels=x_labels)
 
     y_ticks = np.arange(0, ny, 10)
@@ -146,7 +146,7 @@ def plot_results(df, location, count, result, output_dir="inversion_figures"):
     im = ax.imshow(masked_grid, cmap=cmap, aspect='auto')
     ax.set_xlim(0, nx)
     x_ticks = np.arange(0, nx, 10)
-    x_labels = 65 + 5 * x_ticks
+    x_labels = 67.5 + 5 * x_ticks
     ax.set_xticks(ticks=x_ticks, labels=x_labels)
     ax.set_xlabel('Excess Temperature (K)')
 
