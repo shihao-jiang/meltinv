@@ -9,7 +9,7 @@
 
 ## How the samples in `modern_OIB.xlsx` were selected
 
-Ocean-island basalts were taken from GEOROC, supplemented by 79 samples compiled directly from eight further studies; the same criteria were applied to all samples. A sample was excluded if it:
+All ocean-island basalts were taken from GEOROC (https://georoc.eu). A sample was excluded if it:
 
 1. lacked SiO2, MgO or total FeO, or reported fewer than 6 of the 14 REE;
 2. had MgO < 7.5 wt%;
