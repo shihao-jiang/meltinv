@@ -6,7 +6,7 @@ volcanic province and ordered by mean seismic lithospheric thickness:
   (a) lithospheric thickness vs seismic estimates
   (b) average melting pressure vs the Plank & Forsyth (2016) thermobarometer
   (c) excess temperature vs Putirka (2008) and Bao et al. (2022)
-  (d) source enrichment
+  (d) effective source parameter p (positive: % basalt; negative: % depleted mantle, on a compressed scale)
 """
 import re
 
@@ -16,6 +16,13 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import PchipInterpolator
 
 KM_TO_GPA = 0.03          # 1 km of depth ~ 0.03 GPa
+DEPLETED_SCALE = 10       # panel (d) draws depleted values (-100 to 0%) compressed to -10 to 0
+
+
+def _enrichment_axis(p):
+    """Panel (d) coordinate of the source parameter p (%): enriched values as they are, depleted ones compressed."""
+    p = np.asarray(p, dtype=float)
+    return np.where(p < 0, p / DEPLETED_SCALE, p)
 
 
 def province(location):
@@ -90,9 +97,10 @@ def comparison_figure(summary, lit_T, pf16, misfit_cutoff=0.06, corrected=True, 
         ax.scatter([i] * len(g), g.h_plot, edgecolors="black", color="lightblue", s=72, zorder=5,
                    label="This study" if i == 0 else None)
     err = np.mean(np.abs(df.litho_thickness_ref - df.h_plot))
+    bias = np.mean(df.h_plot - df.litho_thickness_ref)   # inverted minus seismic
     ax.invert_yaxis()
     ax.set(ylim=(120, 10), ylabel="Lithospheric Thickness (km)", xticks=range(len(order)))
-    ax.text(0.005, 0.95, f"(a) Average error = {err:.1f} km", transform=ax.transAxes)
+    ax.text(0.005, 0.95, f"(a) Average absolute error = {err:.1f} km, average error = {bias:+.1f} km", transform=ax.transAxes)
     ax.legend()
 
     # (b) average melting pressure
@@ -139,17 +147,21 @@ def comparison_figure(summary, lit_T, pf16, misfit_cutoff=0.06, corrected=True, 
     ax.text(0.005, 0.95, "(c)", transform=ax.transAxes)
     ax.legend(ncol=2)
 
-    # (d) source enrichment
+    # (d) effective source parameter p: positive = % basalt, negative = % depleted mantle (compressed scale)
     ax = axs[3]
     for i, name in enumerate(order):
         g = df[df.province == name]
+        y = _enrichment_axis(g.basalt_percentage)
         ax.axvline(i, color="grey", alpha=0.2, linestyle="--")
-        ax.scatter([i] * len(g), g.basalt_percentage, color="#984EA3", s=72, edgecolors="black", alpha=0.8,
+        ax.scatter([i] * len(g), y, color="#984EA3", s=72, edgecolors="black", alpha=0.8,
                    label="This study" if i == 0 else None)
-        ax.vlines(i, g.basalt_percentage.min() - 0.5, g.basalt_percentage.max() + 0.5, colors="#984EA3",
-                  alpha=0.3, lw=10)
-    ax.set(ylim=(0, 15), ylabel="Basalt Percentage (%)")
-    ax.text(0.005, 0.95, "(d)", transform=ax.transAxes)
+        ax.vlines(i, y.min() - 0.5, y.max() + 0.5, colors="#984EA3", alpha=0.3, lw=10)
+    ax.axhline(0, color="black", lw=0.8)
+    ticks = [-100, -50, 0, 5, 10, 15]
+    ax.set(ylim=(-11, 16), yticks=_enrichment_axis(ticks), yticklabels=[str(t) for t in ticks],
+           ylabel="Effective source parameter, p (%)")
+    ax.text(0.005, 0.95, f"(d) p < 0: depleted mantle, scale compressed ×{DEPLETED_SCALE}",
+            transform=ax.transAxes)
     ax.legend()
     ax.set_xticks(range(len(order)), order, rotation=45, ha="right")
 
