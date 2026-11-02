@@ -15,7 +15,7 @@ dependencies = [
   "pandas>=2.0,<2.2",
   "openpyxl",
   "matplotlib==3.9.2",
-  "meltPT @ git+https://github.com/shihao-jiang/meltPT_fixed.git"
+  "meltPT @ git+https://github.com/shihao-jiang/meltPT_fixed.git@3fa2b30ba580bcfa7a6f9b09fd2e6131db6391ba"
 ]
 license = "MIT"
 

@@ -4,4 +4,4 @@
 # folder:  pip install -e ".[app]"
 meltinv[app] @ git+https://github.com/shihao-jiang/meltinv.git@main
 # Also listed here because the uv installer only accepts GitHub packages that are named directly
-meltPT @ git+https://github.com/shihao-jiang/meltPT_fixed.git
+meltPT @ git+https://github.com/shihao-jiang/meltPT_fixed.git@3fa2b30ba580bcfa7a6f9b09fd2e6131db6391ba
