@@ -32,6 +32,13 @@ from .plot_archive import PlotArchiveWriter
 from ._misfit import ModelLogCache, prepare_observations, evaluate_misfit
 
 
+# Primitive mantle REE (ppm, McDonough & Sun 1995)
+PM_1995 = {
+    "La": 0.648, "Ce": 1.675, "Pr": 0.254, "Nd": 1.250, "Sm": 0.406, "Eu": 0.154,
+    "Gd": 0.544, "Tb": 0.099, "Dy": 0.674, "Ho": 0.149, "Er": 0.438, "Tm": 0.068,
+    "Yb": 0.441, "Lu": 0.0675}
+
+
 def source_composition_mix(basalt_perc):
     """Return REE concentration multipliers relative to primitive mantle.
 
@@ -40,11 +47,6 @@ def source_composition_mix(basalt_perc):
     For example, -50 denotes equal primitive/depleted-mantle mixing. This is the
     existing source parameterisation, separate from the later calibration.
     """
-    PM_1995 = {
-        "La": 0.648, "Ce": 1.675, "Pr": 0.254, "Nd": 1.250, "Sm": 0.406, "Eu": 0.154,
-        "Gd": 0.544, "Tb": 0.099, "Dy": 0.674, "Ho": 0.149, "Er": 0.438, "Tm": 0.068,
-        "Yb": 0.441, "Lu": 0.0675}
-
     Basalts_1989 = {
         "La": 2.5, "Ce": 7.50, "Pr": 1.32, "Nd": 7.3, "Sm": 2.63, "Eu": 1.02,
         "Gd": 3.68, "Tb": 0.67, "Dy": 4.55, "Ho": 1.01, "Er": 2.97, "Tm": 0.456,
@@ -210,31 +212,23 @@ def compute_total_ree_misfit(df, mask, scale_val, grids, min_sample_count=2):
     return misfit, threshold, index, factors if misfit is not None else None
 
 
-def get_enrichment_values(location, depleted_locations):
+def lree_depleted(la, sm):
+    """True if the primitive-mantle-normalised (La/Sm)_N is below 1.
+
+    Only such LREE-depleted samples search depleted sources (negative basalt_percentage).
+    A missing or non-positive La or Sm counts as not depleted.
     """
-    Determine enrichment range based on location name.
-    depleted_locations may be None, a list of location keywords, or 'all'
-    (every location uses the extended depleted range).
-    """
-    extended_range = list(range(-100, 0, 5)) + np.arange(0, 15.1, 0.1).tolist()
-    default_range = np.arange(0, 15.1, 0.1).tolist()
+    la, sm = float(la), float(sm)
+    if not (np.isfinite(la) and np.isfinite(sm) and la > 0 and sm > 0):
+        return False
+    return (la / PM_1995["La"]) / (sm / PM_1995["Sm"]) < 1
 
-    if isinstance(depleted_locations, str):
-        depleted_locations = [depleted_locations]
 
-    # 'all' applies the extended enrichment range to every location
-    if depleted_locations is not None and any(
-            str(keyword).lower() == 'all' for keyword in depleted_locations):
-        return extended_range
-
-    # Use extended enrichment range if location name contains any depleted keyword
-    if depleted_locations is not None:
-        if any(keyword in location for keyword in depleted_locations):
-            return extended_range
-        else:
-            return default_range
-    else:
-        return default_range
+def get_enrichment_values(depleted):
+    """Search values of basalt_percentage: 0 to 15% basalt, plus 5 to 100% depleted mantle
+    (as -100 to -5) if depleted is True."""
+    enriched = np.arange(0, 15.1, 0.1).tolist()
+    return list(range(-100, 0, 5)) + enriched if depleted else enriched
 
 
 def invert_single_group(df, location, count, grids, test_enrichment_values, min_sample_count=2,
@@ -466,7 +460,7 @@ def aggregate_per_sample_results(results_df):
     return pd.DataFrame(rows)
 
 
-def invert_melt_condition(file_name, depleted_location=None, correction=False,
+def invert_melt_condition(file_name, correction=False,
                           src_Fo=0.9, max_olivine_addition=0.4, individual_sample_figures=False,
                           group_comparison_figure=True, *, plot_archive=None, fe3_fe_total=0.1,
                           measured_fe3=False):
@@ -486,7 +480,7 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
         if Path(plot_archive).suffix.lower() != '.zip':
             raise ValueError("plot_archive must have a .zip extension, e.g. 'run.zip'")
     context = (PlotArchiveWriter(plot_archive, {
-        "input_file": str(file_name), "depleted_location": depleted_location,
+        "input_file": str(file_name), "depleted_rule": "(La/Sm)_N < 1",
         "correction": correction, "src_Fo": src_Fo,
         "max_olivine_addition": max_olivine_addition, "fe3_fe_total": fe3_fe_total,
         "measured_fe3": measured_fe3,
@@ -531,7 +525,8 @@ def invert_melt_condition(file_name, depleted_location=None, correction=False,
         model_cache = ModelLogCache(grids, source_composition_mix)
         results = []
         for location, count in group_list:
-            test_enrichment_values = get_enrichment_values(location, depleted_location)
+            sample = df.loc[df["location"] == location].iloc[0]
+            test_enrichment_values = get_enrichment_values(lree_depleted(sample["La"], sample["Sm"]))
             result = invert_single_group(df, location, count, grids, test_enrichment_values,
                                          min_sample_count=1, model_cache=model_cache,
                                          retain_diagnostics=individual_sample_figures or plot_archive is not None)

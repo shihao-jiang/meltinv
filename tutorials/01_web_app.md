@@ -51,7 +51,7 @@ Fix the file in Excel and upload it again. Open **Preview the first rows** to ch
   - It is ticked automatically when the file has all 10 major-oxide columns. Leave it on for measured basalts, and switch it off if your file already contains primary-magma compositions.
   - **Mantle olivine Fo** (default 0.90) is the forsterite content of that mantle olivine; **Maximum olivine addition** (default 0.50) is the largest mass fraction of olivine that may be added; **Fe³⁺/ΣFe** (default 0.10) is the fraction of each sample's total iron treated as Fe³⁺. Measured Fe2O3 is not used, because alteration often raises it.
   - Samples that cannot be corrected (usually olivine-rich, cumulate samples) are skipped rather than inverted with uncorrected compositions.
-- **Source enrichment range.** By default the mantle source is primitive mantle mixed with **0–15% basalt**. If some locations may have a **depleted** source (for example Iceland), choose **Some locations may be depleted** and select them; their search then also includes mixtures of primitive and depleted mantle. For this tutorial, keep **Enriched only**.
+- **Source enrichment.** There is nothing to set: every sample searches primitive mantle mixed with **0–15% basalt**, and samples with an LREE-depleted pattern (primitive-mantle-normalised (La/Sm)<sub>N</sub> < 1) also search mixtures of primitive and depleted mantle.
 - **Also make a diagnostic figure for every sample.** Adds one 4-panel figure per sample (section 6). It makes the run and the download larger, so it is off by default and available for files of up to 300 samples.
 
 ## 4. Run

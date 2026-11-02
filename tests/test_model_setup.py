@@ -2,8 +2,9 @@
 import numpy as np
 import pytest
 
-from meltinv.inversion import calibration, get_enrichment_values, source_composition_mix
-from conftest import REE
+import meltinv
+from meltinv.inversion import calibration, get_enrichment_values, lree_depleted, source_composition_mix
+from conftest import REE, write_csv
 
 
 def test_packaged_grids_have_the_expected_shape(grids):
@@ -16,11 +17,30 @@ def test_packaged_grids_have_the_expected_shape(grids):
 
 
 def test_enrichment_search_ranges():
-    default = get_enrichment_values("Hawaii", None)
+    default = get_enrichment_values(False)
     assert len(default) == 151 and default[0] == 0 and default[-1] == pytest.approx(15.0)
-    assert len(get_enrichment_values("Iceland (NNVZ)", ["Iceland"])) == 171     # adds -100 to -5
-    assert len(get_enrichment_values("Hawaii", ["Iceland"])) == 151
-    assert len(get_enrichment_values("Hawaii", "all")) == 171
+    extended = get_enrichment_values(True)                       # adds -100 to -5
+    assert len(extended) == 171 and extended[0] == -100 and extended[19] == -5
+
+
+def test_only_lree_depleted_samples_search_depleted_sources():
+    # (La/Sm)_N = (La/0.648)/(Sm/0.406), primitive mantle of McDonough & Sun (1995)
+    assert lree_depleted(0.5 * 0.648, 0.406)                    # (La/Sm)_N = 0.5
+    assert not lree_depleted(0.648, 0.406)                      # exactly primitive mantle
+    assert not lree_depleted(2 * 0.648, 0.406)
+    for la, sm in [(np.nan, 1.0), (1.0, np.nan), (0.0, 1.0), (1.0, 0.0)]:
+        assert not lree_depleted(la, sm)                        # missing or zero: enriched search only
+
+
+def test_depleted_search_follows_each_sample_la_sm(in_tmp, grid_sample):
+    # cell 426 is among the most LREE-depleted model cells: (La/Sm)_N = 0.75 with 60% depleted mantle
+    rows = [grid_sample(k=426, enrichment=-60, location="A")[0],
+            grid_sample(k=426, enrichment=-60, location="A")[0]]
+    rows[1]["La"] = 3 * rows[1]["Sm"] * 0.648 / 0.406            # same sample made LREE-enriched
+    assert lree_depleted(rows[0]["La"], rows[0]["Sm"]) and not lree_depleted(rows[1]["La"], rows[1]["Sm"])
+    write_csv(rows, "input.csv")
+    out = meltinv.invert("input.csv", group_comparison_figure=False)
+    assert out.basalt_percentage.iloc[0] < 0 and out.basalt_percentage.iloc[1] >= 0
 
 
 def test_source_mixing_end_members():

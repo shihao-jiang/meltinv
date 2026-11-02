@@ -2,12 +2,14 @@ from . import inversion
 from .inversion import invert_melt_condition
 from .frac_correction import fractionation_correction
 
-def invert(file_name, depleted_locations=None, correction=False, src_Fo=0.9,
+def invert(file_name, *, correction=False, src_Fo=0.9,
            max_olivine_addition=0.5, individual_sample_figures=False,
-           group_comparison_figure=True, make_figures=None, per_sample=True, *, plot_archive=None,
+           group_comparison_figure=True, make_figures=None, per_sample=True, plot_archive=None,
            fe3_fe_total=0.1, measured_fe3=False):
     """
-    High-level API for melt inversion. Every sample is inverted individually.
+    High-level API for melt inversion. Every sample is inverted individually. Samples with
+    primitive-mantle-normalised (La/Sm)_N < 1 also search depleted sources; all others search
+    primitive mantle with 0-15% basalt.
 
     plot_archive optionally saves a self-contained snapshot for regenerate_figures().
     It can be saved with both plotting flags disabled.
@@ -27,7 +29,7 @@ def invert(file_name, depleted_locations=None, correction=False, src_Fo=0.9,
     if make_figures is not None:
         individual_sample_figures = make_figures
 
-    summary_df = invert_melt_condition(file_name, depleted_locations, correction,
+    summary_df = invert_melt_condition(file_name, correction,
                           src_Fo, max_olivine_addition, individual_sample_figures,
                           group_comparison_figure, plot_archive=plot_archive,
                           fe3_fe_total=fe3_fe_total, measured_fe3=measured_fe3)

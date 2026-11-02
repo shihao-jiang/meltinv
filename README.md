@@ -76,7 +76,6 @@ import meltinv
 
 meltinv.invert(
     file_name,                        # .xlsx or .csv input file
-    depleted_locations=None,          # locations whose source may be depleted
     correction=False,                 # run the fractionation correction first
     src_Fo=0.9,                       # forsterite content of source olivine
     max_olivine_addition=0.5,         # maximum olivine added during correction
@@ -95,7 +94,6 @@ meltinv.correction(file_name, src_Fo=0.9, max_olivine_addition=0.5, fe3_fe_total
 | Argument | Command-line flag | Default | What it does |
 |---|---|---|---|
 | `file_name` | `FILE` | — | Input `.xlsx` or `.csv` file (see [Step 1](#step-1-prepare-the-input-file)). |
-| `depleted_locations` | `--depleted LOC [LOC ...]` or `--depleted all` | `None` | By default, the source enrichment is searched from 0 to 15% basalt mixed into primitive mantle. For the locations given here, mixtures of primitive mantle with 5 to 100% depleted mantle are also searched; these appear as negative `basalt_percentage` values. Give location names or parts of names: matching is by substring and case-sensitive, so `Iceland` matches `Iceland (NNVZ)` but not `iceland`. Use `"all"` for every location. |
 | `correction` | `--correction` | `False` | Correct evolved samples back to primary magma before inverting (see [Step 2](#step-2-optional-fractionation-correction)). |
 | `src_Fo` | `--src_Fo` | `0.9` | Forsterite content of the mantle-source olivine. Used only by the correction. |
 | `max_olivine_addition` | `--max_olivine_addition` | `0.5` | Maximum mass fraction of olivine that may be added. Used only by the correction. |
@@ -104,6 +102,8 @@ meltinv.correction(file_name, src_Fo=0.9, max_olivine_addition=0.5, fe3_fe_total
 | `individual_sample_figures` | `--individual_sample_figures` | `False` | Save a 4-panel REE and misfit figure for each sample (see [Step 5](#step-5-reading-the-figures)). |
 | `group_comparison_figure` | `--no_group_comparison_figure` turns it off | `True` | Save a figure comparing the samples at each location with ≥ 3 samples (see [Step 5](#step-5-reading-the-figures)). |
 | `plot_archive` | `--plot_archive PATH.zip` | `None` | Save a plotting snapshot; does not itself draw figures. See [plotting later](#calculate-once-and-regenerate-figures-later). |
+
+The source enrichment is chosen per sample, with no setting: every sample searches 0 to 15% basalt mixed into primitive mantle, and samples whose primitive-mantle-normalised (La/Sm)<sub>N</sub> is below 1 also search mixtures of primitive mantle with 5 to 100% depleted mantle, which appear as negative `basalt_percentage` values. Arguments after `file_name` must be given by name.
 
 `meltinv.invert` returns the per-sample results as a pandas DataFrame, and `meltinv.correction` returns the corrected data. On the command line, the two functions are `meltinv invert FILE [flags]` and `meltinv correction FILE [flags]`.
 
@@ -114,8 +114,7 @@ Older argument names still work: `make_figures` (`--make_figures`) means `indivi
 ```text
 meltinv correction FILE [--src_Fo 0.9] [--max_olivine_addition 0.5] [--fe3_fe_total 0.1] [--measured_fe3]
 
-meltinv invert FILE [--depleted LOC [LOC ...] | --depleted all]
-                    [--correction] [--src_Fo 0.9] [--max_olivine_addition 0.5] [--fe3_fe_total 0.1]
+meltinv invert FILE [--correction] [--src_Fo 0.9] [--max_olivine_addition 0.5] [--fe3_fe_total 0.1]
                     [--measured_fe3]
                     [--individual_sample_figures] [--no_group_comparison_figure]
                     [--plot_archive PATH.zip]
@@ -123,10 +122,10 @@ meltinv invert FILE [--depleted LOC [LOC ...] | --depleted all]
 meltinv plot PATH.zip [--output_dir DIR] [--no_individual] [--no_groups]
 ```
 
-For example, to treat the Iceland and Galápagos locations as possibly depleted, correct the samples first and save the individual figures:
+For example, to correct the samples first and save the individual figures:
 
 ```bash
-meltinv invert input.xlsx --depleted Iceland Galapagos --correction --individual_sample_figures
+meltinv invert input.xlsx --correction --individual_sample_figures
 ```
 
 ### Output files
@@ -294,7 +293,7 @@ Both files share these columns:
 | `pres_mean_cali`, `pres_min_cali`, `pres_max_cali` | Mean, minimum and maximum melting depth (km, about 33 km/GPa), shifted by the same calibration as the thickness |
 | `F_mean`, `F_min`, `F_max` | Mean, minimum and maximum melt fraction of the best-fit model |
 | `M_mean`, `M_min`, `M_max` | Mean, minimum and maximum melting rate of the best-fit model |
-| `basalt_percentage` | Best-fit **relative source enrichment**. Positive values (0 to 15) are the % of basalt mixed into primitive mantle. Negative values (−100 to −5, only with `--depleted`) are the % of depleted mantle mixed into primitive mantle. |
+| `basalt_percentage` | Best-fit **relative source enrichment**. Positive values (0 to 15) are the % of basalt mixed into primitive mantle. Negative values (−100 to −5, only for samples with (La/Sm)<sub>N</sub> < 1) are the % of depleted mantle mixed into primitive mantle. |
 | `misfit_value` | RMS log10 misfit of the best-fit model (lower is better; see [§5](#5-how-the-inversion-works)) |
 | `global_min_value` | Lowest misfit anywhere in the full temperature–thickness–enrichment search |
 | `ratio_of_local_global_misfit` | `misfit_value / global_min_value`. A value of 1 means the reported solution is the global minimum. |
@@ -424,7 +423,7 @@ On that branch, group inversion is the default and `--per_sample` switches to th
 1. **Forward-model grid.** The package ships with precomputed melting models (`meltinv/data/*.npy`). They give the REE concentrations of accumulated melts, with min/max envelopes, melting depths, melt fractions (`F`) and melting rates (`M`). The grid spans mantle excess temperature (65 to 350 K in 5 K steps) and lithospheric thickness (16 to 120 km in 2 km steps).
 2. **Source enrichment.** For each trial enrichment value, the model REE concentrations are rescaled for a source made by mixing:
    - primitive mantle (McDonough & Sun, 1995) with 0 to 15% basalt (Sun & McDonough, 1989), in steps of 0.1%; or
-   - with `--depleted`, primitive mantle with 5 to 100% depleted mantle (Salters & Stracke, 2004).
+   - for samples with (La/Sm)<sub>N</sub> < 1, also primitive mantle with 5 to 100% depleted mantle (Salters & Stracke, 2004).
 3. **Misfit.** For each sample, the misfit is the root-mean-square (RMS) of the log10 residuals over the N usable REE, corrected for the 3 fitted parameters (temperature, thickness and enrichment): misfit = √( Σ (log10 c_model − log10 c_sample)² / (N − 3) ). This is the current residual statistic, not a reduced chi-squared: no measurement uncertainties or REE error covariance are used. The ordinary RMS log residual is this statistic multiplied by √((N − 3)/N), so its numerical value should not be interpreted directly as a typical percentage error.
 4. **Best fit.** For each sample, the temperature, thickness and enrichment combination with the lowest misfit is reported.
 5. **Calibration.** The grid assumes a peridotite source. The best-fit temperature and thickness are then corrected for the effect of a pyroxenite (G2) component on the solidus. This uses flux-weighted mixing (Phipps Morgan, 2001; Sobolev et al., 2007), with the pyroxenite fraction taken from the inverted enrichment. The results are the `_cali` columns.

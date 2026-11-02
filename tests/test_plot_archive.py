@@ -26,8 +26,8 @@ def test_archive_reproduces_figures_and_preserves_results(in_tmp, grid_sample, m
 
     rows[0]['Lu'] = np.nan  # missing REE must survive saving and plotting
     write_csv(rows, 'input.csv')
-    plain = invert('input.csv', depleted_locations='all', group_comparison_figure=False)
-    saved = invert('input.csv', depleted_locations='all', individual_sample_figures=True,
+    plain = invert('input.csv', group_comparison_figure=False)
+    saved = invert('input.csv', individual_sample_figures=True,
                    plot_archive='run.zip')
     pd.testing.assert_frame_equal(plain, saved, check_exact=True)
     original = {p.name: p.read_bytes() for p in (in_tmp/'inversion_figures').glob('*.png')}

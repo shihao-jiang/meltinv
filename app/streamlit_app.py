@@ -197,8 +197,6 @@ def build_command(input_name, options):
         command += ["--correction", "--src_Fo", str(options["src_Fo"]),
                     "--max_olivine_addition", str(options["max_olivine_addition"]),
                     "--fe3_fe_total", str(options["fe3_fe_total"])]
-    if options["depleted"]:
-        command += ["--depleted", *options["depleted"]]
     if options["individual_figures"]:
         command.append("--individual_sample_figures")
     return command
@@ -249,7 +247,7 @@ def readme_text(input_name, options, log):
                   f"  Maximum olivine addition: {options['max_olivine_addition']}",
                   f"  Fe3+/total Fe (all samples, from total iron): {options['fe3_fe_total']}"]
     lines += [
-        f"  Possibly depleted locations: {', '.join(options['depleted']) or 'none'}",
+        "  Depleted sources: searched for samples with (La/Sm)_N < 1",
         f"  Individual sample figures: {'yes' if options['individual_figures'] else 'no'}",
         "",
         "Contents",
@@ -385,17 +383,8 @@ if correction:
                                   help="Used to split each sample's total iron into FeO and Fe2O3 "
                                        "for the olivine correction.")
 
-depleted_mode = st.segmented_control(
-    "Source enrichment range", ["Enriched only", "Some locations may be depleted", "All locations may be depleted"],
-    default="Enriched only", required=True,
-    help="By default the source is primitive mantle plus 0–15% basalt. Locations marked as possibly "
-         "depleted also search mixtures of primitive and depleted mantle.")
-depleted = []
-if depleted_mode == "Some locations may be depleted":
-    depleted = st.multiselect("Possibly depleted locations",
-                              sorted(data["location"].dropna().astype(str).unique()))
-elif depleted_mode == "All locations may be depleted":
-    depleted = ["all"]
+st.caption("Source enrichment: every sample searches primitive mantle plus 0–15% basalt. Samples with "
+           "primitive-mantle-normalised (La/Sm)_N < 1 also search mixtures of primitive and depleted mantle.")
 
 too_many_for_figures = len(data) > MAX_INDIVIDUAL_FIGURES
 individual_figures = st.checkbox(
@@ -405,7 +394,7 @@ if too_many_for_figures:
     st.caption(f"Individual figures are available for files with up to {MAX_INDIVIDUAL_FIGURES} samples.")
 
 options = {"correction": correction, "src_Fo": src_Fo, "max_olivine_addition": max_olivine_addition,
-           "fe3_fe_total": fe3_fe_total, "depleted": depleted, "individual_figures": individual_figures}
+           "fe3_fe_total": fe3_fe_total, "individual_figures": individual_figures}
 
 # 4. Run -----------------------------------------------------------------------
 st.header("4. Run", divider="gray")

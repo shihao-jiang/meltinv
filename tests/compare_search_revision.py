@@ -8,6 +8,7 @@ of the physical model. Both runs use identical inputs and disable plotting.
 """
 import argparse
 import contextlib
+import inspect
 import json
 import os
 from pathlib import Path
@@ -52,8 +53,10 @@ def main():
                 os.chdir(work)
                 with open(os.devnull, 'w') as sink, contextlib.redirect_stdout(sink):
                     start = time.perf_counter()
+                    # Revisions before the per-sample (La/Sm)_N rule chose depleted sources by location
+                    legacy = 'depleted_location' in inspect.signature(module.invert_melt_condition).parameters
                     result = module.invert_melt_condition(
-                        dataset, depleted_location=['Iceland', 'Galapagos'],
+                        dataset, **({'depleted_location': ['Iceland', 'Galapagos']} if legacy else {}),
                         group_comparison_figure=False,
                         **({'plot_archive': 'run.zip'}
                            if name == 'candidate' and args.plot_archive else {}))

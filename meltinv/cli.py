@@ -25,7 +25,6 @@ def main():
         help="Run inversion"
     )
     parser_inv.add_argument("file_name", type=str)
-    parser_inv.add_argument("--depleted", nargs="+")
     parser_inv.add_argument("--correction", action="store_true")
     parser_inv.add_argument("--src_Fo", type=float, default=0.9)
     parser_inv.add_argument("--max_olivine_addition", type=float, default=0.5)
@@ -57,11 +56,8 @@ def main():
         )
 
     elif args.command == "invert":
-        depleted_locations = tuple(args.depleted) if args.depleted else None
-
         invert(
             file_name=args.file_name,
-            depleted_locations=depleted_locations,
             correction=args.correction,
             src_Fo=args.src_Fo,
             max_olivine_addition=args.max_olivine_addition,
