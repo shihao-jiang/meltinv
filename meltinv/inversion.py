@@ -256,8 +256,9 @@ def invert_single_group(df, location, count, grids, test_enrichment_values, min_
       names are kept for compatibility.
     - global_flat_index: best cell in (enrichment, thickness, temperature) order.
     - ratio_of_local_global_misfit: compatibility field, always 1.
-    - mean_ree, low_ree, high_ree: source-scaled model REE and its forward-model
-      min/max envelope (ppm), not statistical confidence limits.
+    - mean_ree, low_ree, high_ree: source-scaled model REE and its M*r-weighted
+      10th and 90th percentiles over the melting region (ppm), not statistical
+      confidence limits.
     - mean_ree_global: same as mean_ree, kept for the plot interface.
     - misfit_grid: (thickness, temperature) slice at the best enrichment.
     - full_3d_grids: complete surface if retain_diagnostics, otherwise None.

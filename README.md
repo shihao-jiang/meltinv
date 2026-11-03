@@ -290,9 +290,9 @@ Both files share these columns:
 | `T_mean_cali` | `T_mean` after the source-lithology calibration (see [§5](#5-how-the-inversion-works)). **Use this value.** |
 | `depth_mean` | Best-fit lithospheric thickness (km) from the grid |
 | `depth_mean_cali` | Calibrated lithospheric thickness (km). **Use this value.** |
-| `pres_mean_cali`, `pres_min_cali`, `pres_max_cali` | Mean, minimum and maximum melting depth (km, about 33 km/GPa), shifted by the same calibration as the thickness |
-| `F_mean`, `F_min`, `F_max` | Mean, minimum and maximum melt fraction of the best-fit model |
-| `M_mean`, `M_min`, `M_max` | Mean, minimum and maximum melting rate of the best-fit model |
+| `pres_mean_cali`, `pres_min_cali`, `pres_max_cali` | Mean melting depth and its 10th and 90th percentiles (km, about 33 km/GPa) over the melting region, shifted by the same calibration as the thickness |
+| `F_mean`, `F_min`, `F_max` | Mean melt fraction of the best-fit model and its 10th and 90th percentiles over the melting region |
+| `M_mean`, `M_min`, `M_max` | Mean melting rate of the best-fit model and its low and high values over the melting region |
 | `basalt_percentage` | Best-fit **relative source enrichment**. Positive values (0 to 15) are the % of basalt mixed into primitive mantle. Negative values (−100 to −5, only for samples with (La/Sm)<sub>N</sub> < 1) are the % of depleted mantle mixed into primitive mantle. |
 | `misfit_value` | RMS log10 misfit of the best-fit model (lower is better; see [§5](#5-how-the-inversion-works)) |
 | `global_min_value` | Lowest misfit anywhere in the full temperature–thickness–enrichment search |
@@ -332,7 +332,7 @@ Each individual figure has four panels:
 
 | Panel | What it shows |
 |---|---|
-| **Top left** | Chondrite-normalised REE pattern: the sample (black), the best-fit model (red) with its forward-model min/max envelope (shading), and the global best fit (orange). The inverted temperature, thickness and enrichment are printed in the corner. |
+| **Top left** | Chondrite-normalised REE pattern: the sample (black), the best-fit model (red) with the 10th–90th percentile range of its concentrations over the melting region (shading), and the global best fit (orange). The inverted temperature, thickness and enrichment are printed in the corner. |
 | **Top right** | Misfit across excess temperature and lithospheric thickness, at the best-fit enrichment. Colours and contours show misfit divided by the minimum misfit, so 1.1 means 10% worse than the best fit. The red star marks the best fit, the orange circle the global minimum, and the dashed line `litho_thickness_ref`. |
 | **Bottom left** | Misfit across excess temperature and enrichment, at the best-fit thickness |
 | **Bottom right** | Misfit across thickness and enrichment, at the best-fit temperature |
@@ -420,7 +420,7 @@ On that branch, group inversion is the default and `--per_sample` switches to th
 
 ## 5. How the inversion works
 
-1. **Forward-model grid.** The package ships with precomputed melting models (`meltinv/data/*.npy`). They give the REE concentrations of accumulated melts, with min/max envelopes, melting depths, melt fractions (`F`) and melting rates (`M`). The grid spans mantle excess temperature (65 to 350 K in 5 K steps) and lithospheric thickness (16 to 120 km in 2 km steps).
+1. **Forward-model grid.** The package ships with precomputed melting models (`meltinv/data/*.npy`). They give the REE concentrations of accumulated melts, melting depths, melt fractions (`F`) and melting rates (`M`). The grid spans mantle excess temperature (65 to 350 K in 5 K steps) and lithospheric thickness (16 to 120 km in 2 km steps). Each quantity is averaged over the melting region (cells with a positive melting rate) with weights M·r, where r is the distance from the plume axis (M alone uses weights r). The `*_min_*` and `*_max_*` arrays hold the 10th and 90th percentiles with the same weights, not the extremes; only the melting-rate arrays differ. They are used for display only, and the misfit uses the means.
 2. **Source enrichment.** For each trial enrichment value, the model REE concentrations are rescaled for a source made by mixing:
    - primitive mantle (McDonough & Sun, 1995) with 0 to 15% basalt (Sun & McDonough, 1989), in steps of 0.1%; or
    - for samples with (La/Sm)<sub>N</sub> < 1, also primitive mantle with 5 to 100% depleted mantle (Salters & Stracke, 2004).

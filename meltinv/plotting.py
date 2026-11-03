@@ -64,7 +64,7 @@ def plot_results(df, location, count, result, output_dir="inversion_figures"):
     enrichment_values = np.asarray(result["enrichment_values"], dtype=float)
 
     fig, axs = plt.subplots(2, 2, figsize=(9, 7.35), layout='constrained')
-    # Top left: observed REEs and the fitted model envelope.
+    # Top left: observed REEs and the fitted model with its 10th-90th percentile range.
     ax = axs[0, 0]
 
     ree_variables = ['La', 'Ce', 'Pr', 'Nd', 'Sm', 'Eu', 'Gd',
