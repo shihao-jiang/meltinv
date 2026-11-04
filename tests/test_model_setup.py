@@ -33,9 +33,9 @@ def test_only_lree_depleted_samples_search_depleted_sources():
 
 
 def test_depleted_search_follows_each_sample_la_sm(in_tmp, grid_sample):
-    # cell 426 is among the most LREE-depleted model cells: (La/Sm)_N = 0.75 with 60% depleted mantle
-    rows = [grid_sample(k=426, enrichment=-60, location="A")[0],
-            grid_sample(k=426, enrichment=-60, location="A")[0]]
+    # cell 503 is the most LREE-depleted model cell: (La/Sm)_N = 0.70 with 60% depleted mantle
+    rows = [grid_sample(k=503, enrichment=-60, location="A")[0],
+            grid_sample(k=503, enrichment=-60, location="A")[0]]
     rows[1]["La"] = 3 * rows[1]["Sm"] * 0.648 / 0.406            # same sample made LREE-enriched
     assert lree_depleted(rows[0]["La"], rows[0]["Sm"]) and not lree_depleted(rows[1]["La"], rows[1]["Sm"])
     write_csv(rows, "input.csv")

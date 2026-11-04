@@ -79,7 +79,7 @@ def test_misfit_scales_with_number_of_elements_as_expected():
         assert grid[0, 0] == pytest.approx(r * np.sqrt(n / (n - 3)))
 
 
-@pytest.mark.parametrize("k, enrichment", [(500, 0.0), (1200, 3.0), (2000, 11.7)])
+@pytest.mark.parametrize("k, enrichment", [(500, 0.0), (1200, 3.0), (1800, 11.7)])
 def test_sample_taken_from_the_model_grid_is_recovered_exactly(in_tmp, grid_sample, k, enrichment):
     # End to end through meltinv.invert, on the packaged grids.
     row, T, h = grid_sample(k=k, enrichment=enrichment)
