@@ -269,11 +269,11 @@ For the example, the main columns look like this:
 
 | location | count | T_mean_cali (K) | T range (K) | depth_mean_cali (km) | depth range (km) | basalt_percentage | litho_thickness_ref (km) |
 |---|---|---|---|---|---|---|---|
-| Austral-Cook Islands (Atiu) | 3 | 73.0 | 69.9–76.2 | 56.6 | 50.9–62.4 | 4.1 | 86.7 |
-| Austral-Cook Islands (Mangaia) | 12 | 86.2 | 71.9–100.6 | 55.5 | 50.2–60.7 | 3.5 | 83.4 |
-| Austral-Cook Islands (Marotiri) | 1 | 99.5 | — | 63.7 | — | 4.6 | 68.3 |
-| Austral-Cook Islands (Raivavae) | 13 | 98.4 | 65.7–131.0 | 58.0 | 46.2–69.9 | 3.3 | 73.8 |
-| Austral-Cook Islands (Rapa) | 6 | 142.3 | 115.6–169.1 | 89.0 | 79.0–99.1 | 6.3 | 67.9 |
+| Austral-Cook Islands (Atiu) | 3 | 75.3 | 71.1–79.5 | 57.4 | 52.6–62.2 | 5.4 | 86.7 |
+| Austral-Cook Islands (Mangaia) | 12 | 84.7 | 70.2–99.2 | 55.0 | 51.0–59.0 | 3.7 | 83.5 |
+| Austral-Cook Islands (Marotiri) | 1 | 82.3 | — | 56.9 | — | 3.9 | 68.3 |
+| Austral-Cook Islands (Raivavae) | 13 | 99.6 | 66.0–133.3 | 56.0 | 44.0–68.1 | 3.3 | 73.8 |
+| Austral-Cook Islands (Rapa) | 6 | 141.0 | 113.7–168.4 | 83.2 | 74.3–92.2 | 6.4 | 67.9 |
 
 The ranges are the `_err_minus` to `_err_plus` columns. Three of the 38 samples (two from Mangaia, one from Raivavae) are not inverted: their MgO is above 19 wt%, and the olivine correction cannot be applied (see Step 2).
 
@@ -420,7 +420,7 @@ On that branch, group inversion is the default and `--per_sample` switches to th
 
 ## 5. How the inversion works
 
-1. **Forward-model grid.** The package ships with precomputed melting models (`meltinv/data/*.npy`, described in [`meltinv/data/README.md`](meltinv/data/README.md)). They give the REE concentrations of accumulated melts, melting depths, melt fractions (`F`) and melting rates (`M`) on a grid of 5 K × 2 km cells spanning mantle excess temperature 65 to 355 K and lithospheric thickness 15 to 121 km, evaluated at the cell centres (67.5 to 352.5 K and 16 to 120 km). Only cells whose centre lies inside the convex hull of the 77 simulation snapshots have values (centres 87.5 to 342.5 K and 24 to 114 km); the others are empty. The melt region of each cell is reconstructed from the simulations by optimal-transport interpolation at the cell centre, and each quantity is averaged over it (cells with a positive melting rate) with weights M·r, where r is the distance from the plume axis (M alone uses weights r). No smoothing is applied across the grid. The `*_min_*` and `*_max_*` arrays hold the 10th and 90th percentiles with the same weights, not the extremes. They are used for display only, and the misfit uses the means.
+1. **Forward-model grid.** The package ships with precomputed melting models (`meltinv/data/*.npy`, described in [`meltinv/data/README.md`](meltinv/data/README.md)). They give the REE concentrations of accumulated melts, melting depths, melt fractions (`F`) and melting rates (`M`) on a grid of 5 K × 2 km cells spanning mantle excess temperature 65 to 355 K and lithospheric thickness 15 to 121 km, evaluated at the cell centres (67.5 to 352.5 K and 16 to 120 km). Only cells whose centre lies inside the convex hull of the 77 simulation snapshots have values (centres 87.5 to 342.5 K and 24 to 112 km); the others are empty. The melt region of each cell is reconstructed from the simulations by optimal-transport interpolation at the cell centre, and each quantity is averaged over it (cells with a positive melting rate) with weights M·r, where r is the distance from the plume axis (M alone uses weights r). No smoothing is applied across the grid. The `*_min_*` and `*_max_*` arrays hold the 10th and 90th percentiles with the same weights, not the extremes. They are used for display only, and the misfit uses the means.
 2. **Source enrichment.** For each trial enrichment value, the model REE concentrations are rescaled for a source made by mixing:
    - primitive mantle (McDonough & Sun, 1995) with 0 to 15% basalt (Sun & McDonough, 1989), in steps of 0.1%; or
    - for samples with (La/Sm)<sub>N</sub> < 1, also primitive mantle with 5 to 100% depleted mantle (Salters & Stracke, 2004).
